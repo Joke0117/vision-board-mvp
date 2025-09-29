@@ -1,29 +1,15 @@
 import { TeamSection } from "@/components/TeamSection";
 import { teamsData } from "@/data/teamData";
-import { Sparkles } from "lucide-react";
+import { Navbar } from "@/components/Navbar";
+import { Footer } from "@/components/Footer";
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background">
-      {/* Header */}
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10 shadow-sm">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg">
-              <Sparkles className="h-8 w-8 text-white" />
-            </div>
-            <div>
-              <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                Multimedia Visión Pentecostés
-              </h1>
-              <p className="text-muted-foreground mt-1">Panel Administrativo del Equipo</p>
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background flex flex-col">
+      <Navbar />
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8 md:py-12">
+      <main className="container mx-auto px-4 py-8 md:py-12 flex-1">
         <div className="max-w-5xl mx-auto">
           {/* Intro Card */}
           <div className="bg-card rounded-2xl p-6 md:p-8 mb-8 shadow-lg border">
@@ -59,6 +45,7 @@ const Index = () => {
           </div>
         </div>
       </main>
+      <Footer />
     </div>
   );
 };

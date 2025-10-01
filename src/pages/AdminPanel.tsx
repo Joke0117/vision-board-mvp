@@ -46,14 +46,15 @@ const AdminPanel = () => {
 
   const fetchUserProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("profiles")
         .select("*")
         .eq("id", userId)
         .single();
 
       if (error) throw error;
-      setProfile(data);
+      if (!data) return;
+      setProfile(data as Profile);
       
       if (data.role === "admin") {
         await fetchAllProfiles();
@@ -73,7 +74,7 @@ const AdminPanel = () => {
   };
 
   const fetchAllProfiles = async () => {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from("profiles")
       .select("*")
       .order("full_name");
@@ -82,11 +83,11 @@ const AdminPanel = () => {
       console.error("Error fetching profiles:", error);
       return;
     }
-    setProfiles(data || []);
+    setProfiles((data || []) as Profile[]);
   };
 
   const fetchAllTasks = async () => {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from("tasks")
       .select(`
         *,
@@ -99,11 +100,11 @@ const AdminPanel = () => {
       console.error("Error fetching tasks:", error);
       return;
     }
-    setTasks(data || []);
+    setTasks((data || []) as Task[]);
   };
 
   const fetchMyTasks = async (userId: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from("tasks")
       .select(`
         *,
@@ -117,7 +118,7 @@ const AdminPanel = () => {
       console.error("Error fetching tasks:", error);
       return;
     }
-    setTasks(data || []);
+    setTasks((data || []) as Task[]);
   };
 
   const handleLogout = async () => {
@@ -137,7 +138,7 @@ const AdminPanel = () => {
 
   const handleDeleteTask = async (taskId: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("tasks")
         .delete()
         .eq("id", taskId);

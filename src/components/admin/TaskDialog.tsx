@@ -78,7 +78,7 @@ export const TaskDialog = ({ open, onOpenChange, task, profiles, onSave, current
     try {
       if (task) {
         // Update existing task
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from("tasks")
           .update(formData)
           .eq("id", task.id);
@@ -91,7 +91,7 @@ export const TaskDialog = ({ open, onOpenChange, task, profiles, onSave, current
         });
       } else {
         // Create new task
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from("tasks")
           .insert({
             ...formData,

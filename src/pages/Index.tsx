@@ -1,46 +1,15 @@
 import { TeamSection } from "@/components/TeamSection";
-import { HeroCarousel } from "@/components/HeroCarousel";
 import { teamsData } from "@/data/teamData";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
-import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
-import { Settings, Users } from "lucide-react";
 
 const Index = () => {
-  const navigate = useNavigate();
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background flex flex-col">
       <Navbar />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8 md:py-12 flex-1">
-        {/* Hero Carousel */}
-        <HeroCarousel />
-
-        {/* Quick Access Panel */}
-        <div className="mb-8 flex justify-center">
-          <div className="flex gap-4">
-            <Button 
-              onClick={() => navigate("/auth")} 
-              className="flex items-center gap-2"
-              size="lg"
-            >
-              <Settings className="h-5 w-5" />
-              Panel Administrativo
-            </Button>
-            <Button 
-              onClick={() => navigate("/organigrama")} 
-              variant="outline"
-              className="flex items-center gap-2"
-              size="lg"
-            >
-              <Users className="h-5 w-5" />
-              Ver Organigrama
-            </Button>
-          </div>
-        </div>
         <div className="max-w-5xl mx-auto">
           {/* Intro Card */}
           <div className="bg-card rounded-2xl p-6 md:p-8 mb-8 shadow-lg border">

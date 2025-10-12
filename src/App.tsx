@@ -8,9 +8,6 @@ import Organigrama from "./pages/Organigrama";
 import LogrosMetas from "./pages/LogrosMetas";
 import Galeria from "./pages/Galeria";
 import MisionVision from "./pages/MisionVision";
-import Auth from "./pages/Auth";
-import AdminPanel from "./pages/AdminPanel";
-import MyTasks from "./pages/MyTasks";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,9 +24,6 @@ const App = () => (
           <Route path="/logros-metas" element={<LogrosMetas />} />
           <Route path="/galeria" element={<Galeria />} />
           <Route path="/mision-vision" element={<MisionVision />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/admin" element={<AdminPanel />} />
-          <Route path="/my-tasks" element={<MyTasks />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

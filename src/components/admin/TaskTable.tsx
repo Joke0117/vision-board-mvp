@@ -1,6 +1,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Edit, Trash2 } from "lucide-react";
 import { type Task } from "@/types/admin";
 import { format } from "date-fns";
@@ -11,6 +12,7 @@ interface TaskTableProps {
   isAdmin: boolean;
   onEdit: (task: Task) => void;
   onDelete: (taskId: string) => void;
+  onUpdateStatus?: (taskId: string, newStatus: string) => void;
 }
 
 const estadoColors = {
@@ -27,7 +29,7 @@ const estadoLabels = {
   cancelado: "Cancelado",
 };
 
-export const TaskTable = ({ tasks, isAdmin, onEdit, onDelete }: TaskTableProps) => {
+export const TaskTable = ({ tasks, isAdmin, onEdit, onDelete, onUpdateStatus }: TaskTableProps) => {
   return (
     <div className="bg-card rounded-xl border shadow-lg overflow-hidden">
       <div className="overflow-x-auto">
@@ -67,9 +69,25 @@ export const TaskTable = ({ tasks, isAdmin, onEdit, onDelete }: TaskTableProps) 
                   <TableCell className="max-w-xs truncate">{task.idea_contenido}</TableCell>
                   <TableCell>{task.responsable?.full_name || task.responsable?.email}</TableCell>
                   <TableCell>
-                    <Badge className={estadoColors[task.estado]}>
-                      {estadoLabels[task.estado]}
-                    </Badge>
+                    {isAdmin ? (
+                      <Badge className={estadoColors[task.estado]}>
+                        {estadoLabels[task.estado]}
+                      </Badge>
+                    ) : (
+                      <Select
+                        value={task.estado}
+                        onValueChange={(value) => onUpdateStatus?.(task.id, value)}
+                      >
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pendiente">Pendiente</SelectItem>
+                          <SelectItem value="en_progreso">En Progreso</SelectItem>
+                          <SelectItem value="completado">Completado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
                   </TableCell>
                   {isAdmin && (
                     <TableCell className="text-right">

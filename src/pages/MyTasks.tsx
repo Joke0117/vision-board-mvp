@@ -3,19 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, LogOut, LayoutDashboard, Users } from "lucide-react";
+import { LogOut, ClipboardList } from "lucide-react";
 import { TaskTable } from "@/components/admin/TaskTable";
-import { TaskDialog } from "@/components/admin/TaskDialog";
 import { type Task, type Profile } from "@/types/admin";
 
-const AdminPanel = () => {
+const MyTasks = () => {
   const [user, setUser] = useState<any>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -27,9 +22,7 @@ const AdminPanel = () => {
         navigate("/auth");
       } else {
         setUser(session.user);
-        setTimeout(() => {
-          checkAdminRole(session.user.id);
-        }, 0);
+        fetchMyTasks(session.user.id);
       }
     });
 
@@ -43,108 +36,56 @@ const AdminPanel = () => {
       return;
     }
     setUser(session.user);
-    await checkAdminRole(session.user.id);
+    await fetchMyTasks(session.user.id);
   };
 
-  const checkAdminRole = async (userId: string) => {
+  const fetchMyTasks = async (userId: string) => {
     try {
-      // Check if user has admin role
       const { data, error } = await (supabase as any)
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", userId)
-        .eq("role", "admin")
-        .single();
+        .from("tasks")
+        .select(`
+          *,
+          responsable:profiles!tasks_responsable_id_fkey(id, email, full_name),
+          creator:profiles!tasks_created_by_fkey(id, email, full_name)
+        `)
+        .eq("responsable_id", userId)
+        .order("fecha_publicacion", { ascending: false });
 
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
-
-      const hasAdminRole = !!data;
-      setIsAdmin(hasAdminRole);
-
-      if (!hasAdminRole) {
-        // If not admin, redirect to member tasks page
-        navigate("/my-tasks");
-        return;
-      }
-
-      // Only admins can see this panel
-      await fetchAllProfiles();
-      await fetchAllTasks();
+      if (error) throw error;
+      setTasks((data || []) as Task[]);
     } catch (error: any) {
       toast({
-        title: "Error de acceso",
-        description: "No tienes permisos para acceder al panel administrativo",
+        title: "Error",
+        description: error.message,
         variant: "destructive",
       });
-      navigate("/my-tasks");
     } finally {
       setLoading(false);
     }
   };
-
-  const fetchAllProfiles = async () => {
-    const { data, error } = await (supabase as any)
-      .from("profiles")
-      .select("*")
-      .order("full_name");
-
-    if (error) {
-      console.error("Error fetching profiles:", error);
-      return;
-    }
-    setProfiles((data || []) as Profile[]);
-  };
-
-  const fetchAllTasks = async () => {
-    const { data, error } = await (supabase as any)
-      .from("tasks")
-      .select(`
-        *,
-        responsable:profiles!tasks_responsable_id_fkey(id, email, full_name),
-        creator:profiles!tasks_created_by_fkey(id, email, full_name)
-      `)
-      .order("fecha_publicacion", { ascending: false });
-
-    if (error) {
-      console.error("Error fetching tasks:", error);
-      return;
-    }
-    setTasks((data || []) as Task[]);
-  };
-
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/auth");
   };
 
-  const handleCreateTask = () => {
-    setEditingTask(null);
-    setIsDialogOpen(true);
-  };
-
-  const handleEditTask = (task: Task) => {
-    setEditingTask(task);
-    setIsDialogOpen(true);
-  };
-
-  const handleDeleteTask = async (taskId: string) => {
+  const handleUpdateTaskStatus = async (taskId: string, newStatus: string) => {
     try {
       const { error } = await (supabase as any)
         .from("tasks")
-        .delete()
+        .update({ estado: newStatus })
         .eq("id", taskId);
 
       if (error) throw error;
 
       toast({
-        title: "Tarea eliminada",
-        description: "La tarea ha sido eliminada correctamente",
+        title: "Estado actualizado",
+        description: "El estado de la tarea ha sido actualizado correctamente",
       });
 
-      await fetchAllTasks();
+      if (user) {
+        await fetchMyTasks(user.id);
+      }
     } catch (error: any) {
       toast({
         title: "Error",
@@ -154,16 +95,12 @@ const AdminPanel = () => {
     }
   };
 
-  const handleSaveTask = async () => {
-    await fetchAllTasks();
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/30 to-background">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Cargando panel...</p>
+          <p className="text-muted-foreground">Cargando tus tareas...</p>
         </div>
       </div>
     );
@@ -177,17 +114,16 @@ const AdminPanel = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
-                <LayoutDashboard className="w-6 h-6 text-primary-foreground" />
+                <ClipboardList className="w-6 h-6 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold">Panel Administrativo</h1>
-                <p className="text-sm text-muted-foreground">Administrador</p>
+                <h1 className="text-2xl font-bold">Mis Tareas Asignadas</h1>
+                <p className="text-sm text-muted-foreground">Miembro del Equipo</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Button onClick={() => navigate("/")} variant="ghost" className="gap-2">
-                <Users className="w-4 h-4" />
-                Equipo
+              <Button onClick={() => navigate("/")} variant="ghost">
+                Inicio
               </Button>
               <Button onClick={handleLogout} variant="outline" className="gap-2">
                 <LogOut className="w-4 h-4" />
@@ -201,25 +137,15 @@ const AdminPanel = () => {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <div className="mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <div>
-              <h2 className="text-3xl font-bold mb-2">Parrilla de Contenido</h2>
-              <p className="text-muted-foreground">
-                Gestiona todas las tareas del equipo de multimedia
-              </p>
-            </div>
-            <Button onClick={handleCreateTask} className="gap-2 shadow-lg" size="lg">
-              <Plus className="w-5 h-5" />
-              Nueva Tarea
-            </Button>
+          <div className="mb-6">
+            <h2 className="text-3xl font-bold mb-2">Tus Tareas</h2>
+            <p className="text-muted-foreground">
+              Consulta y actualiza el estado de las tareas que te han sido asignadas
+            </p>
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-card rounded-xl p-6 border shadow-sm">
-              <div className="text-3xl font-bold text-primary mb-1">{tasks.length}</div>
-              <div className="text-sm text-muted-foreground">Total de Tareas</div>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="bg-card rounded-xl p-6 border shadow-sm">
               <div className="text-3xl font-bold text-secondary mb-1">
                 {tasks.filter(t => t.estado === "pendiente").length}
@@ -243,24 +169,15 @@ const AdminPanel = () => {
           {/* Task Table */}
           <TaskTable
             tasks={tasks}
-            isAdmin={isAdmin}
-            onEdit={handleEditTask}
-            onDelete={handleDeleteTask}
+            isAdmin={false}
+            onEdit={() => {}}
+            onDelete={() => {}}
+            onUpdateStatus={handleUpdateTaskStatus}
           />
         </div>
       </main>
-
-      {/* Task Dialog */}
-      <TaskDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        task={editingTask}
-        profiles={profiles}
-        onSave={handleSaveTask}
-        currentUserId={user?.id}
-      />
     </div>
   );
 };
 
-export default AdminPanel;
+export default MyTasks;

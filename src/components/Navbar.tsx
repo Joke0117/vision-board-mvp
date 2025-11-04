@@ -1,19 +1,44 @@
+// src/components/Navbar.tsx
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X } from "lucide-react";
+import { Menu, X, LogOut, LayoutDashboard, CalendarCheck } from "lucide-react"; // <-- Icono cambiado
 import { useState } from "react";
 import logo from "@/assets/multimedia-logo.png";
+import { useAuth } from "@/hooks/useAuth"; 
+import { auth } from "@/firebaseConfig"; 
+import { signOut } from "firebase/auth"; 
+import { Button } from "./ui/button";
 
 export const Navbar = () => {
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
+  const { user } = useAuth(); 
 
-  const links = [
+  const baseLinks = [
     { name: "Equipo", path: "/" },
     { name: "Organigrama", path: "/organigrama" },
     { name: "Logros y Metas", path: "/logros-metas" },
     { name: "Galería", path: "/galeria" },
     { name: "Misión y Visión", path: "/mision-vision" },
   ];
+
+  // Links condicionales actualizados
+  const userLinks = [
+    { name: "Mi Contenido", path: "/mi-contenido", icon: CalendarCheck }, // <-- CAMBIADO
+  ];
+
+  const adminLinks = [
+    { name: "Panel Admin", path: "/admin-dashboard", icon: LayoutDashboard },
+  ];
+
+  const links = [
+    ...baseLinks, 
+    ...userLinks, 
+    ...(user?.role === 'admin' ? adminLinks : [])
+  ];
+
+  const handleLogout = () => {
+    signOut(auth);
+  };
 
   return (
     <nav className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50 shadow-sm">
@@ -33,7 +58,7 @@ export const Navbar = () => {
               <Link
                 key={link.path}
                 to={link.path}
-                className={`px-4 py-2 rounded-lg transition-colors ${
+                className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
                   location.pathname === link.path
                     ? "bg-primary text-primary-foreground"
                     : "hover:bg-muted"
@@ -42,6 +67,10 @@ export const Navbar = () => {
                 {link.name}
               </Link>
             ))}
+            <Button variant="ghost" size="sm" onClick={handleLogout} className="ml-2">
+              <LogOut className="h-4 w-4 mr-2" />
+              Cerrar Sesión
+            </Button>
           </div>
 
           {/* Mobile Menu Button */}
@@ -70,6 +99,10 @@ export const Navbar = () => {
                 {link.name}
               </Link>
             ))}
+            <Button variant="outline" onClick={handleLogout} className="w-full">
+              <LogOut className="h-4 w-4 mr-2" />
+              Cerrar Sesión
+            </Button>
           </div>
         )}
       </div>

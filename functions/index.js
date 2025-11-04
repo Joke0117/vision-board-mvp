@@ -50,7 +50,7 @@ exports.onContentCreated = functions
         </div>
         
         <p>Puedes ver y actualizar el estado de esta tarea en el panel:</p>
-        <a href="URL_DE_TU_APP_WEB" style="padding: 12px 20px; background-color: #6a1b9a; color: white; text-decoration: none; border-radius: 5px;">Ir al Panel</a>
+        <a href="https://adminmultimediavisionpentacostes.netlify.app/" style="padding: 12px 20px; background-color: #6a1b9a; color: white; text-decoration: none; border-radius: 5px;">Ir al Panel</a>
         <br>
         <p>¡Dios te bendiga!</p>
       `,

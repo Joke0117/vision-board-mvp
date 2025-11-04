@@ -1,7 +1,7 @@
 // src/pages/AdminDashboard.tsx
 import * as React from "react";
 import { useState, useEffect } from "react";
-import { AdminLayout } from "@/components/AdminLayout"; // <-- Nuevo Layout
+import { AdminLayout } from "@/components/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import { collection, addDoc, getDocs, doc, query, Timestamp, deleteDoc, onSnapsh
 import { db } from "@/firebaseConfig";
 import { useAuth } from "@/hooks/useAuth";
 import { Trash, PlusCircle, Users, BarChart, Clock, CheckCircle } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle"; // Importar ThemeToggle
 
 // Interfaz para el usuario del equipo
 interface TeamUser {
@@ -74,7 +75,6 @@ const AdminDashboard = () => {
   useEffect(() => {
     // Cargar TODOS los miembros del equipo (admin + users)
     const fetchTeam = async () => {
-      // CORRECCIÓN: Quitamos el 'where' para incluir a todos, incluido el admin
       const usersQuery = query(collection(db, "users"));
       const querySnapshot = await getDocs(usersQuery);
       const teamMembers: TeamUser[] = [];
@@ -87,7 +87,6 @@ const AdminDashboard = () => {
     fetchTeam();
 
     // Suscribirse al contenido para actualizaciones en vivo
-    // CORRECCIÓN: Ordenar por fecha de publicación
     const contentQuery = query(collection(db, "contentSchedule"), orderBy("publishDate", "desc"));
     const unsubscribe = onSnapshot(contentQuery, (snapshot) => {
       const contentData: Content[] = [];
@@ -156,11 +155,12 @@ const AdminDashboard = () => {
     }
   };
   
+  // ¡AQUÍ ESTÁ LA CORRECCIÓN!
   const handleDeleteContent = async (contentId: string) => {
     if (window.confirm("¿Estás seguro de que quieres eliminar esta publicación?")) {
-      try {
+      try { // <-- Se añade el {
         await deleteDoc(doc(db, "contentSchedule", contentId));
-      } catch (error) {
+      } catch (error) { // <-- Ahora 'error' es válido
         console.error("Error al eliminar contenido: ", error);
       }
     }

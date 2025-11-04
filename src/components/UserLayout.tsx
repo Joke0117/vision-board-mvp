@@ -36,10 +36,14 @@ import { auth } from "@/firebaseConfig";
 import { signOut } from "firebase/auth";
 import logo from "@/assets/multimedia-logo.png";
 import { ThemeToggle } from "./ThemeToggle";
+import { HamburgerMenu } from "./HamburgerMenu";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export const UserLayout = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
   const location = useLocation();
+  const isMobile = useIsMobile();
+  const [open, setOpen] =React.useState(false);
 
   const handleLogout = () => {
     signOut(auth);
@@ -59,22 +63,28 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
   ];
 
   return (
-    <SidebarProvider defaultOpen={true}>
+    <SidebarProvider defaultOpen={true} open={isMobile ? open : undefined} onOpenChange={isMobile ? setOpen : undefined}>
+      {isMobile && (
+        <div className="fixed top-4 left-4 z-50">
+          <HamburgerMenu isOpen={open} onClick={() => setOpen(!open)} />
+        </div>
+      )}
       <Sidebar
         variant="sidebar"
         collapsible="icon"
         className="border-r border-border/70"
       >
-        <SidebarHeader className="h-16 flex items-center justify-center gap-2.5">
-          <img src={logo} alt="Logo" className="h-10 w-10" />
+        {/* --- CAMBIO: Añadido "flex-row" y "justify-start" --- */}
+        <SidebarHeader className="h-20 flex flex-row items-center justify-start px-4 gap-3 border-b border-border/70 pt-6 pb-4">
+          <img src={logo} alt="Logo" className="h-12 w-12 shrink-0" />
           <h2 className="font-bold text-lg bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent group-data-[collapsible=icon]:hidden">
             Multimedia
           </h2>
         </SidebarHeader>
 
-        {/* --- ¡ESTE ES EL CÓDIGO BUENO! --- */}
-        <SidebarContent> {/* <-- SIN CLASES */}
-          <SidebarMenu className="flex-1"> {/* <-- CON flex-1 */}
+        {/* El footer ya está arreglado (flex-1 en SidebarContent) */}
+        <SidebarContent className="py-4 flex-1">
+          <SidebarMenu className="px-2">
             {menuItems.map((item) => (
               <SidebarMenuItem key={item.path}>
                 <SidebarMenuButton
@@ -91,7 +101,6 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
             ))}
           </SidebarMenu>
         </SidebarContent>
-        {/* --- FIN DEL ARREGLO --- */}
 
         <SidebarFooter className="p-2 border-t border-border/70">
           <ThemeToggle />
@@ -126,7 +135,7 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
         </SidebarFooter>
       </Sidebar>
 
-      <SidebarInset>{children}</SidebarInset>
+      <SidebarInset className={isMobile ? "pt-16" : ""}>{children}</SidebarInset>
     </SidebarProvider>
   );
 };

@@ -136,8 +136,7 @@ const Sidebar = React.forwardRef<
     collapsible?: "offcanvas" | "icon" | "none";
   }
 >(({ side = "left", variant = "sidebar", collapsible = "offcanvas", className, children, ...props }, ref) => {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
-
+  const { isMobile, state, open, setOpen, openMobile, setOpenMobile } = useSidebar();
   if (collapsible === "none") {
     return (
       <div
@@ -152,7 +151,7 @@ const Sidebar = React.forwardRef<
 
   if (isMobile) {
     return (
-      <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
+      <Sheet open={open} onOpenChange={setOpen} {...props}>
         <SheetContent
           data-sidebar="sidebar"
           data-mobile="true"
@@ -331,7 +330,7 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.ComponentProps<"di
       ref={ref}
       data-sidebar="content"
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
+        "flex min-h-0 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden", // <-- SE QUITÓ flex-1
         className,
       )}
       {...props}

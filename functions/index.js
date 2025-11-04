@@ -1,32 +1,65 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
+// functions/index.js
+const functions = require("firebase-functions");
+const nodemailer = require("nodemailer");
 
-const {setGlobalOptions} = require("firebase-functions");
-const {onRequest} = require("firebase-functions/https");
-const logger = require("firebase-functions/logger");
+// ¡Importante! Esto carga tu archivo .env
+require("dotenv").config();
 
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
-setGlobalOptions({ maxInstances: 10 });
+// Leer desde process.env (el archivo .env)
+const gmailEmail = process.env.GMAIL_EMAIL;
+const gmailPassword = process.env.GMAIL_PASSWORD;
 
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
+const mailTransport = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: gmailEmail,
+    pass: gmailPassword,
+  },
+});
 
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+// Función que se dispara cuando se CREA un nuevo documento en 'contentSchedule'
+exports.onContentCreated = functions
+  .region("us-central1") // Asegúrate de que coincida con tu región de Firebase
+  .firestore
+  .document("contentSchedule/{contentId}")
+  .onCreate(async (snap) => {
+    const content = snap.data();
+
+    if (!content) {
+      console.log("No hay datos en el documento.");
+      return;
+    }
+
+    const recipientEmail = content.responsibleEmail;
+    const taskTitle = content.type;
+    const contentIdea = content.contentIdea;
+
+    const mailOptions = {
+      from: `"Panel Multimedia" <${gmailEmail}>`,
+      to: recipientEmail,
+      subject: `¡Nueva asignación de contenido! - ${taskTitle}`,
+      html: `
+        <p>Hola,</p>
+        <p>Se te ha asignado un nuevo contenido en el panel de Multimedia:</p>
+        
+        <div style="padding: 16px; border: 1px solid #ddd; border-radius: 8px; background-color: #f9f9f9;">
+          <p><strong>Tipo:</strong> ${taskTitle}</p>
+          <p><strong>Idea del Contenido:</strong> ${contentIdea}</p>
+          <p><strong>Plataforma:</strong> ${content.platform}</p>
+          <p><strong>Fecha de Publicación:</strong> ${content.publishDate || "No definida"}</p>
+        </div>
+        
+        <p>Puedes ver y actualizar el estado de esta tarea en el panel:</p>
+        <a href="URL_DE_TU_APP_WEB" style="padding: 12px 20px; background-color: #6a1b9a; color: white; text-decoration: none; border-radius: 5px;">Ir al Panel</a>
+        <br>
+        <p>¡Dios te bendiga!</p>
+      `,
+    };
+
+    try {
+      await mailTransport.sendMail(mailOptions);
+      console.log(`Correo enviado a: ${recipientEmail}`);
+    } catch (error) {
+      console.error("Hubo un error al enviar el correo:", error);
+    }
+  });

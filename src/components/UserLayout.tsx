@@ -1,6 +1,5 @@
-// src/components/UserLayout.tsx
 import * as React from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -17,10 +16,13 @@ import {
 } from "@/components/ui/sidebar";
 import {
   Home,
+  Users,
+  BarChart2,
   CalendarCheck,
+  Image,
+  Target,
   LogOut,
   ChevronDown,
-  LayoutDashboard,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -32,8 +34,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { auth } from "@/firebaseConfig";
 import { signOut } from "firebase/auth";
-import logo from "@/assets/multimedia-logo.png"; // Asegúrate de tener tu logo aquí
-import { ThemeToggle } from "./ThemeToggle"; // Componente para cambiar tema
+import logo from "@/assets/multimedia-logo.png";
+import { ThemeToggle } from "./ThemeToggle";
 
 export const UserLayout = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
@@ -44,13 +46,16 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
   };
 
   const getInitials = (email: string) => {
-    return email.substring(0, 2).toUpperCase();
+    return email ? email.substring(0, 2).toUpperCase() : "U";
   };
 
   const menuItems = [
-    { name: "Mi Dashboard", path: "/mi-contenido", icon: LayoutDashboard },
-    // Puedes añadir más si los usuarios tienen otras secciones
-    { name: "Equipo", path: "/admin-dashboard", icon: Home }, // Ejemplo si quieres que vean algo del equipo
+    { name: "Mi Contenido", path: "/mi-contenido", icon: CalendarCheck },
+    { name: "Equipo", path: "/", icon: Home },
+    { name: "Organigrama", path: "/organigrama", icon: Users },
+    { name: "Logros y Metas", path: "/logros-metas", icon: BarChart2 },
+    { name: "Galería", path: "/galeria", icon: Image },
+    { name: "Misión y Visión", path: "/mision-vision", icon: Target },
   ];
 
   return (
@@ -60,15 +65,16 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
         collapsible="icon"
         className="border-r border-border/70"
       >
-        <SidebarHeader className="h-16 flex items-center gap-2.5">
+        <SidebarHeader className="h-16 flex items-center justify-center gap-2.5">
           <img src={logo} alt="Logo" className="h-10 w-10" />
-          <h2 className="font-bold text-lg bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            Panel Usuario
+          <h2 className="font-bold text-lg bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent group-data-[collapsible=icon]:hidden">
+            Multimedia
           </h2>
         </SidebarHeader>
 
-        <SidebarContent className="flex-1">
-          <SidebarMenu>
+        {/* --- ¡ESTE ES EL CÓDIGO BUENO! --- */}
+        <SidebarContent> {/* <-- SIN CLASES */}
+          <SidebarMenu className="flex-1"> {/* <-- CON flex-1 */}
             {menuItems.map((item) => (
               <SidebarMenuItem key={item.path}>
                 <SidebarMenuButton
@@ -85,9 +91,10 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
             ))}
           </SidebarMenu>
         </SidebarContent>
+        {/* --- FIN DEL ARREGLO --- */}
 
         <SidebarFooter className="p-2 border-t border-border/70">
-          <ThemeToggle /> {/* Botón para cambiar tema */}
+          <ThemeToggle />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -100,11 +107,11 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
                       {user?.email ? getInitials(user.email) : "U"}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="truncate text-sm font-medium">
+                  <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
                     {user?.email}
                   </span>
                 </div>
-                <ChevronDown className="h-4 w-4 shrink-0" />
+                <ChevronDown className="h-4 w-4 shrink-0 group-data-[collapsible=icon]:hidden" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56 mb-2" align="end">

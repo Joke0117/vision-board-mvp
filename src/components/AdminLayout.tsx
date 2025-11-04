@@ -1,6 +1,5 @@
-// src/components/AdminLayout.tsx
 import * as React from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -24,6 +23,7 @@ import {
   Target,
   LogOut,
   ChevronDown,
+  LayoutDashboard
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -36,6 +36,7 @@ import {
 import { auth } from "@/firebaseConfig";
 import { signOut } from "firebase/auth";
 import logo from "@/assets/multimedia-logo.png";
+import { ThemeToggle } from "./ThemeToggle";
 
 export const AdminLayout = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
@@ -46,14 +47,15 @@ export const AdminLayout = ({ children }: { children: React.ReactNode }) => {
   };
 
   const getInitials = (email: string) => {
-    return email.substring(0, 2).toUpperCase();
+    return email ? email.substring(0, 2).toUpperCase() : "U";
   };
 
   const menuItems = [
-    { name: "Dashboard", path: "/admin-dashboard", icon: BarChart2 },
+    { name: "Dashboard", path: "/admin-dashboard", icon: LayoutDashboard },
     { name: "Mi Contenido", path: "/mi-contenido", icon: CalendarCheck },
     { name: "Equipo", path: "/", icon: Home },
     { name: "Organigrama", path: "/organigrama", icon: Users },
+    { name: "Logros y Metas", path: "/logros-metas", icon: BarChart2 },
     { name: "Galería", path: "/galeria", icon: Image },
     { name: "Misión y Visión", path: "/mision-vision", icon: Target },
   ];
@@ -65,15 +67,16 @@ export const AdminLayout = ({ children }: { children: React.ReactNode }) => {
         collapsible="icon"
         className="border-r border-border/70"
       >
-        <SidebarHeader className="h-16 flex items-center gap-2.5">
+        <SidebarHeader className="h-16 flex items-center justify-center gap-2.5">
           <img src={logo} alt="Logo" className="h-10 w-10" />
-          <h2 className="font-bold text-lg bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+          <h2 className="font-bold text-lg bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent group-data-[collapsible=icon]:hidden">
             Panel Admin
           </h2>
         </SidebarHeader>
 
-        <SidebarContent className="flex-1">
-          <SidebarMenu>
+        {/* --- ¡ESTE ES EL CÓDIGO BUENO! --- */}
+        <SidebarContent> {/* <-- SIN CLASES */}
+          <SidebarMenu className="flex-1"> {/* <-- CON flex-1 */}
             {menuItems.map((item) => (
               <SidebarMenuItem key={item.path}>
                 <SidebarMenuButton
@@ -90,13 +93,15 @@ export const AdminLayout = ({ children }: { children: React.ReactNode }) => {
             ))}
           </SidebarMenu>
         </SidebarContent>
+        {/* --- FIN DEL ARREGLO --- */}
 
-        <SidebarFooter>
+        <SidebarFooter className="p-2 border-t border-border/70">
+          <ThemeToggle />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
-                className="flex w-full items-center justify-between px-2"
+                className="flex w-full items-center justify-between px-2 mt-2"
               >
                 <div className="flex items-center gap-2 overflow-hidden">
                   <Avatar className="h-8 w-8">
@@ -104,11 +109,11 @@ export const AdminLayout = ({ children }: { children: React.ReactNode }) => {
                       {user?.email ? getInitials(user.email) : "U"}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="truncate text-sm font-medium">
+                  <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
                     {user?.email}
                   </span>
                 </div>
-                <ChevronDown className="h-4 w-4 shrink-0" />
+                <ChevronDown className="h-4 w-4 shrink-0 group-data-[collapsible=icon]:hidden" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56 mb-2" align="end">
@@ -123,7 +128,6 @@ export const AdminLayout = ({ children }: { children: React.ReactNode }) => {
         </SidebarFooter>
       </Sidebar>
 
-      {/* Este es el contenido principal de la página */}
       <SidebarInset>{children}</SidebarInset>
     </SidebarProvider>
   );

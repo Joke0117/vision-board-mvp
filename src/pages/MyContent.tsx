@@ -1,7 +1,7 @@
 // src/pages/MyContent.tsx
 import * as React from "react";
 import { useState, useEffect } from "react";
-import { UserLayout } from "@/components/UserLayout"; 
+import { UserLayout } from "@/components/UserLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -11,17 +11,21 @@ import { db } from "@/firebaseConfig";
 import { useAuth } from "@/hooks/useAuth";
 import { CalendarCheck, Star, Hourglass, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Label } from "@/components/ui/label"; // <-- ¡Asegúrate de importar Label!
+import { Label } from "@/components/ui/label"; // <-- Importar Label para móvil
 
-// Interfaz para el contenido
+// Interfaz para el contenido (actualizada)
 interface Content {
   id: string;
   type: string;
   platform: string;
   publishDate: string;
   contentIdea: string;
-  responsibleId: string;
-  responsibleEmail: string;
+  
+  // --- CAMPOS ACTUALIZADOS ---
+  responsibleIds: string[];
+  responsibleEmails: string[];
+  isActive: boolean;
+  
   status: "Planeado" | "En Progreso" | "Publicado" | "Revisión";
   createdAt: Timestamp;
 }
@@ -40,9 +44,16 @@ const MyContent = () => {
     if (!user) return;
 
     setLoading(true);
+
+    // ==================================
+    // LÓGICA DE CONSULTA CORREGIDA
+    // ==================================
     const userContentQuery = query(
       collection(db, "contentSchedule"),
-      where("responsibleId", "==", user.uid),
+      // 1. Buscar tu ID dentro del array 'responsibleIds'
+      where("responsibleIds", "array-contains", user.uid),
+      // 2. Traer SOLO las tareas que están activas
+      where("isActive", "==", true),
       orderBy("publishDate", "desc")
     );
 
@@ -65,6 +76,13 @@ const MyContent = () => {
         inProgressTasks: inProgress,
         completedTasks: completed,
       });
+      setLoading(false);
+    }, (error) => {
+      console.error("Error en la consulta de Firestore:", error);
+      if (error.code === 'failed-precondition') {
+        console.warn("--- ADVERTENCIA DE FIREBASE ---");
+        console.warn("Se necesita un índice compuesto. Por favor, crea el índice usando el enlace que debe aparecer en la consola de tu navegador.");
+      }
       setLoading(false);
     });
 
@@ -94,42 +112,38 @@ const MyContent = () => {
 
   return (
     <UserLayout>
-      {/* ==================================
-        CAMBIO 1: Padding responsivo
-        Original: p-8 pt-6
-        ==================================
-      */}
-      <div className="flex-1 space-y-8 px-4 py-6 md:px-8">
-        <h1 className="text-3xl font-bold tracking-tight">
+      {/* Padding responsivo */}
+      <div className="flex-1 space-y-6 md:space-y-8 p-4 md:p-8 pt-4 md:pt-6">
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
           Mi Dashboard de Contenido
         </h1>
 
-        {/* Stats (Estas cards ya eran responsivas con grid-cols-1) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Stats de usuario (ya eran responsivas) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           <Card className="border-l-4 border-destructive dark:border-destructive">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
               <CardTitle className="text-sm font-medium">Tareas Pendientes</CardTitle>
               <Hourglass className="h-5 w-5 text-destructive" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               <div className="text-3xl font-bold">{stats.pendingTasks}</div>
             </CardContent>
           </Card>
           <Card className="border-l-4 border-yellow-500 dark:border-yellow-400">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
               <CardTitle className="text-sm font-medium">En Progreso</CardTitle>
               <Star className="h-5 w-5 text-yellow-500 dark:text-yellow-400" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               <div className="text-3xl font-bold">{stats.inProgressTasks}</div>
             </CardContent>
           </Card>
           <Card className="border-l-4 border-primary dark:border-primary">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
               <CardTitle className="text-sm font-medium">Tareas Completadas</CardTitle>
               <CheckCircle className="h-5 w-5 text-primary" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               <div className="text-3xl font-bold">{stats.completedTasks}</div>
             </CardContent>
           </Card>
@@ -143,19 +157,20 @@ const MyContent = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* ========================================================
-              CAMBIO 2: Tabla solo para Desktop (md:block)
-            ===========================================================
+            
+            {/* ==================================
+              VISTA DE TABLA (SOLO DESKTOP)
+              ==================================
             */}
             <div className="border rounded-lg overflow-x-auto hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Contenido</TableHead>
-                    <TableHead>Plataforma</TableHead>
-                    <TableHead>Fecha de Pub.</TableHead>
-                    <TableHead>Estado Actual</TableHead>
-                    <TableHead className="w-[180px]">Actualizar Estado</TableHead>
+                    <TableHead className="min-w-[200px]">Contenido</TableHead>
+                    <TableHead className="min-w-[120px]">Plataforma</TableHead>
+                    <TableHead className="min-w-[120px]">Fecha de Pub.</TableHead>
+                    <TableHead className="min-w-[120px]">Estado Actual</TableHead>
+                    <TableHead className="min-w-[180px]">Actualizar Estado</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -168,45 +183,47 @@ const MyContent = () => {
                       <TableCell colSpan={5} className="text-center">¡No tienes contenido asignado!</TableCell>
                     </TableRow>
                   ) : (
-                    content.map(item => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            <span>{item.type}</span>
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1 ml-6">{item.contentIdea}</p>
-                        </TableCell>
-                        <TableCell>{item.platform}</TableCell>
-                        <TableCell>{item.publishDate || "N/A"}</TableCell>
-                        <TableCell>
-                          <Badge variant={getStatusVariant(item.status)}>{item.status}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Select 
-                            value={item.status} 
-                            onValueChange={(newStatus) => handleStatusChange(item.id, newStatus as Content['status'])}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Cambiar estado" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Planeado">Planeado</SelectItem>
-                              <SelectItem value="En Progreso">En Progreso</SelectItem>
-                              <SelectItem value="Revisión">En Revisión</SelectItem>
-                              <SelectItem value="Publicado">Publicado</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    content.map(item => {
+                      return (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <span>{item.type}</span>
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1 ml-6">{item.contentIdea}</p>
+                          </TableCell>
+                          <TableCell>{item.platform}</TableCell>
+                          <TableCell>{item.publishDate || "N/A"}</TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusVariant(item.status)}>{item.status}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Select 
+                              value={item.status} 
+                              onValueChange={(newStatus) => handleStatusChange(item.id, newStatus as Content['status'])}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Cambiar estado" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Planeado">Planeado</SelectItem>
+                                <SelectItem value="En Progreso">En Progreso</SelectItem>
+                                <SelectItem value="Revisión">En Revisión</SelectItem>
+                                <SelectItem value="Publicado">Publicado</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
             </div>
 
-            {/* ========================================================
-              CAMBIO 3: Lista de Cards solo para Móvil (md:hidden)
-            ===========================================================
+            {/* ==================================
+              VISTA DE CARDS (SOLO MÓVIL)
+              ==================================
             */}
             <div className="space-y-4 md:hidden">
               {loading ? (
@@ -255,6 +272,7 @@ const MyContent = () => {
                 ))
               )}
             </div>
+
           </CardContent>
         </Card>
       </div>

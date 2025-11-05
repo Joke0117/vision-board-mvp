@@ -1,8 +1,8 @@
-// src/pages/Login.tsx
 import * as React from "react";
 import { useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
-import { signInWithEmailAndPassword } from "firebase/auth";
+// 1. IMPORTAR FUNCIÓN
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth"; 
 import { auth } from "@/firebaseConfig";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,8 @@ const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // 2. NUEVO ESTADO PARA MENSAJE DE ÉXITO
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -25,6 +27,7 @@ const LoginPage = () => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setResetMessage(null); // Limpiar mensaje de reset al intentar loguearse
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
@@ -38,6 +41,34 @@ const LoginPage = () => {
           setError("Error al iniciar sesión. Inténtalo de nuevo.");
         }
       }
+      setLoading(false);
+    }
+  };
+
+  // 3. NUEVA FUNCIÓN PARA RESTABLECER CONTRASEÑA
+  const handlePasswordReset = async () => {
+    setError(null);
+    setResetMessage(null);
+
+    if (!email) {
+      setError("Por favor, ingresa tu correo electrónico para restablecer la contraseña.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetMessage("¡Enlace enviado! Revisa tu correo electrónico (y la carpeta de spam) para cambiar tu contraseña.");
+    } catch (err) {
+      console.error(err);
+      if (err instanceof Error) {
+        if (err.message.includes("auth/user-not-found")) {
+          setError("No se encontró una cuenta con ese correo electrónico.");
+        } else {
+          setError("Error al enviar el correo de restablecimiento. Inténtalo de nuevo.");
+        }
+      }
+    } finally {
       setLoading(false);
     }
   };
@@ -58,13 +89,21 @@ const LoginPage = () => {
           <CardDescription>Inicia sesión para acceder al panel del equipo.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
+          {/* Alerta de Error de Login/Reset */}
+          {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          {/* 4. ALERTA DE ÉXITO PARA RESTABLECER CONTRASEÑA */}
+          {resetMessage && (
+              <Alert className="mb-4 border-green-500 text-green-700 bg-green-50 dark:border-green-700 dark:text-green-300 dark:bg-green-900">
+                  <AlertDescription>{resetMessage}</AlertDescription>
               </Alert>
-            )}
+          )}
+          <form onSubmit={handleLogin} className="space-y-4">
+            
             <div className="space-y-2">
               <Label htmlFor="email">Correo Electrónico</Label>
               <Input
@@ -89,6 +128,21 @@ const LoginPage = () => {
                 disabled={loading}
               />
             </div>
+
+            {/* 5. BOTÓN/ENLACE DE OLVIDÓ CONTRASEÑA */}
+            <div className="flex justify-end">
+                <Button 
+                    type="button" 
+                    variant="link" 
+                    size="sm" 
+                    onClick={handlePasswordReset} 
+                    disabled={loading}
+                    className="text-sm p-0 h-auto font-normal text-muted-foreground hover:text-primary"
+                >
+                    ¿Olvidaste tu contraseña?
+                </Button>
+            </div>
+
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Ingresando..." : "Ingresar"}
             </Button>

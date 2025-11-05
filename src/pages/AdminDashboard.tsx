@@ -10,17 +10,40 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { collection, addDoc, getDocs, doc, query, Timestamp, deleteDoc, onSnapshot, orderBy } from "firebase/firestore";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { collection, addDoc, getDocs, doc, query, Timestamp, onSnapshot, orderBy, updateDoc } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 import { useAuth } from "@/hooks/useAuth";
-import { Trash, PlusCircle, Users, BarChart, Clock, CheckCircle } from "lucide-react";
-import { ThemeToggle } from "@/components/ThemeToggle"; // Importar ThemeToggle
+import { PlusCircle, Users, BarChart, Clock, CheckCircle, ChevronsUpDown, Check, Pencil } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // Interfaz para el usuario del equipo
 interface TeamUser {
@@ -29,19 +52,20 @@ interface TeamUser {
   role: "admin" | "user";
 }
 
-// Interfaz para el contenido, basada en tus campos
+// Interfaz para el contenido
 interface Content {
   id: string;
-  type: string; // Tipo de Publicidad
-  platform: string; // Plataforma
-  publishDate: string; // Fecha de Publicación
-  format: string; // Formato
-  objective: string; // Objetivo
-  audience: string; // Público Objetivo
-  contentIdea: string; // Idea del Contenido
-  responsibleId: string; // Responsable (ID)
-  responsibleEmail: string; // Responsable (Email)
+  type: string;
+  platform: string;
+  publishDate: string;
+  format: string;
+  objective: string;
+  audience: string;
+  contentIdea: string;
+  responsibleIds: string[];
+  responsibleEmails: string[];
   status: "Planeado" | "En Progreso" | "Publicado" | "Revisión";
+  isActive: boolean;
   createdAt: Timestamp;
 }
 
@@ -51,7 +75,14 @@ const AdminDashboard = () => {
   const [contentSchedule, setContentSchedule] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Stats en vivo
+  // Popovers de multiselect
+  const [openCreateMultiSelect, setOpenCreateMultiSelect] = useState(false);
+  const [openEditMultiSelect, setOpenEditMultiSelect] = useState(false);
+  
+  // Estado para el modal de Edición
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [currentTask, setCurrentTask] = useState<Content | null>(null);
+
   const [stats, setStats] = useState({
     planned: 0,
     inProgress: 0,
@@ -59,8 +90,8 @@ const AdminDashboard = () => {
     totalUsers: 0,
   });
 
-  // Estados del formulario
-  const [formState, setFormState] = useState({
+  // Estado del formulario de CREAR
+  const initialFormState = {
     type: "",
     platform: "",
     publishDate: "",
@@ -68,12 +99,25 @@ const AdminDashboard = () => {
     objective: "",
     audience: "",
     contentIdea: "",
-    responsibleId: "",
+    responsibleIds: [] as string[],
+  };
+  const [formState, setFormState] = useState(initialFormState);
+  
+  // Estado del formulario de EDITAR
+  const [editFormState, setEditFormState] = useState<Omit<Content, "id" | "responsibleEmails" | "status" | "isActive" | "createdAt">>({
+     type: "",
+     platform: "",
+     publishDate: "",
+     format: "",
+     objective: "",
+     audience: "",
+     contentIdea: "",
+     responsibleIds: [] as string[],
   });
+
 
   // Cargar equipo y contenido
   useEffect(() => {
-    // Cargar TODOS los miembros del equipo (admin + users)
     const fetchTeam = async () => {
       const usersQuery = query(collection(db, "users"));
       const querySnapshot = await getDocs(usersQuery);
@@ -86,22 +130,23 @@ const AdminDashboard = () => {
     };
     fetchTeam();
 
-    // Suscribirse al contenido para actualizaciones en vivo
-    const contentQuery = query(collection(db, "contentSchedule"), orderBy("publishDate", "desc"));
+    const contentQuery = query(collection(db, "contentSchedule"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(contentQuery, (snapshot) => {
       const contentData: Content[] = [];
       let planned = 0, inProgress = 0, published = 0;
 
       snapshot.forEach((doc) => {
-        const data = doc.data() as Omit<Content, "id">;
+        const data = doc.data() as Omit<Content, "id" | "createdAt"> & { createdAt: Timestamp };
         contentData.push({ id: doc.id, ...data });
-        // Actualizar stats en vivo
-        if (data.status === "Planeado") planned++;
-        if (data.status === "En Progreso") inProgress++;
-        if (data.status === "Publicado") published++;
+        
+        if (data.isActive) {
+          if (data.status === "Planeado") planned++;
+          if (data.status === "En Progreso") inProgress++;
+          if (data.status === "Publicado") published++;
+        }
       });
       
-      setContentSchedule(contentData); // Ya viene ordenada por el query
+      setContentSchedule(contentData);
       setStats(s => ({ ...s, planned, inProgress, published }));
       setLoading(false);
     });
@@ -109,59 +154,117 @@ const AdminDashboard = () => {
     return () => unsubscribe();
   }, []);
 
+  // --- Funciones para el formulario de CREAR ---
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormState(prev => ({ ...prev, [e.target.id]: e.target.value }));
   };
-
   const handleSelectChange = (id: string, value: string) => {
      setFormState(prev => ({ ...prev, [id]: value }));
   };
-
+  const handleMultiSelectChange = (userId: string) => {
+    setFormState(prev => {
+      const newIds = prev.responsibleIds.includes(userId)
+        ? prev.responsibleIds.filter(id => id !== userId)
+        : [...prev.responsibleIds, userId];
+      return { ...prev, responsibleIds: newIds };
+    });
+  };
   const resetForm = () => {
-     setFormState({
-        type: "",
-        platform: "",
-        publishDate: "",
-        format: "",
-        objective: "",
-        audience: "",
-        contentIdea: "",
-        responsibleId: "",
-     });
+     setFormState(initialFormState);
+  };
+  
+  // --- Funciones para el formulario de EDITAR ---
+  const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setEditFormState(prev => ({ ...prev, [e.target.id]: e.target.value }));
+  };
+  const handleEditSelectChange = (id: string, value: string) => {
+     setEditFormState(prev => ({ ...prev, [id]: value }));
+  };
+  const handleEditMultiSelectChange = (userId: string) => {
+    setEditFormState(prev => {
+      const newIds = prev.responsibleIds.includes(userId)
+        ? prev.responsibleIds.filter(id => id !== userId)
+        : [...prev.responsibleIds, userId];
+      return { ...prev, responsibleIds: newIds };
+    });
   };
 
+  // --- Lógica de Submit ---
   const handleSubmitContent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formState.type || !formState.platform || !formState.contentIdea || !formState.responsibleId) {
-      alert("Por favor, completa los campos requeridos.");
+    if (!formState.type || !formState.platform || !formState.contentIdea || formState.responsibleIds.length === 0) {
+      alert("Por favor, completa los campos requeridos (incluyendo al menos 1 responsable).");
       return;
     }
 
     try {
-      const selectedUser = team.find(u => u.id === formState.responsibleId);
-      if (!selectedUser) return;
+      const selectedUsers = team.filter(u => formState.responsibleIds.includes(u.id));
+      const selectedEmails = selectedUsers.map(u => u.email);
 
       await addDoc(collection(db, "contentSchedule"), {
         ...formState,
-        responsibleEmail: selectedUser.email,
+        responsibleIds: formState.responsibleIds,
+        responsibleEmails: selectedEmails,
         status: "Planeado",
+        isActive: true,
         createdAt: Timestamp.now(),
         createdBy: user?.uid,
       });
 
-      resetForm(); // Limpiar formulario
+      resetForm();
     } catch (error) {
       console.error("Error al crear contenido: ", error);
     }
   };
+
+  const handleOpenEditModal = (task: Content) => {
+    setCurrentTask(task);
+    setEditFormState({
+      type: task.type,
+      platform: task.platform,
+      publishDate: task.publishDate || "",
+      format: task.format || "",
+      objective: task.objective || "",
+      audience: task.audience || "",
+      contentIdea: task.contentIdea,
+      responsibleIds: task.responsibleIds || [],
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentTask) return;
+
+    try {
+      const selectedUsers = team.filter(u => editFormState.responsibleIds.includes(u.id));
+      const selectedEmails = selectedUsers.map(u => u.email);
+
+      const contentDocRef = doc(db, "contentSchedule", currentTask.id);
+      
+      const updateData = {
+        ...editFormState,
+        responsibleIds: editFormState.responsibleIds,
+        responsibleEmails: selectedEmails,
+      };
+
+      await updateDoc(contentDocRef, updateData);
+
+      setIsEditModalOpen(false);
+      setCurrentTask(null);
+    } catch (error) {
+      console.error("Error al actualizar la tarea: ", error);
+    }
+  };
   
-  const handleDeleteContent = async (contentId: string) => {
-    if (window.confirm("¿Estás seguro de que quieres eliminar esta publicación?")) {
-      try { 
-        await deleteDoc(doc(db, "contentSchedule", contentId));
-      } catch (error) { 
-        console.error("Error al eliminar contenido: ", error);
-      }
+  const handleToggleActive = async (contentId: string, currentIsActive: boolean) => {
+    try {
+      const contentDocRef = doc(db, "contentSchedule", contentId);
+      await updateDoc(contentDocRef, {
+        isActive: !currentIsActive
+      });
+    } catch (error) {
+      console.error("Error al actualizar estado: ", error);
     }
   };
 
@@ -177,17 +280,12 @@ const AdminDashboard = () => {
 
   return (
     <AdminLayout>
-      {/* ==================================
-        CAMBIO 1: Padding responsivo aquí 
-        Original: className="flex-1 space-y-8 p-8 pt-6"
-        ==================================
-      */}
       <div className="flex-1 space-y-8 px-4 py-6 md:px-8">
         <h1 className="text-3xl font-bold tracking-tight">
           Dashboard de Contenido
         </h1>
 
-        {/* Stats (Estas cards ya son responsivas) */}
+        {/* CARDS DE STATS */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="border-l-4 border-destructive dark:border-destructive">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -238,7 +336,7 @@ const AdminDashboard = () => {
                 </div>
               </AccordionTrigger>
               <AccordionContent>
-                {/* Este formulario ya es responsivo */}
+                {/* --- Formulario de CREAR --- */}
                 <form onSubmit={handleSubmitContent} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-4">
                   <div className="space-y-2">
                     <Label htmlFor="type">Tipo de Publicidad</Label>
@@ -277,15 +375,38 @@ const AdminDashboard = () => {
                     <Textarea id="contentIdea" value={formState.contentIdea} onChange={handleFormChange} placeholder="Detalles, texto, etc." required />
                   </div>
                   <div className="md:col-span-2 space-y-2">
-                    <Label htmlFor="responsibleId">Responsable</Label>
-                    <Select value={formState.responsibleId} onValueChange={(v) => handleSelectChange("responsibleId", v)} required>
-                      <SelectTrigger id="responsibleId"><SelectValue placeholder="Seleccionar miembro" /></SelectTrigger>
-                      <SelectContent>
-                        {team.map(member => (
-                          <SelectItem key={member.id} value={member.id}>{member.email}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Responsable(s)</Label>
+                    <Popover open={openCreateMultiSelect} onOpenChange={setOpenCreateMultiSelect}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" role="combobox" className="w-full justify-between">
+                          <span className="truncate">
+                            {formState.responsibleIds.length === 0 && "Seleccionar miembros..."}
+                            {formState.responsibleIds.length === 1 && team.find(t => t.id === formState.responsibleIds[0])?.email}
+                            {formState.responsibleIds.length > 1 && `${formState.responsibleIds.length} miembros seleccionados`}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                        <Command>
+                          <CommandInput placeholder="Buscar miembro..." />
+                          <CommandList>
+                            <CommandEmpty>No se encontraron miembros.</CommandEmpty>
+                            <CommandGroup>
+                              {team.map(member => (
+                                <CommandItem key={member.id} value={member.email} onSelect={() => {
+                                    handleMultiSelectChange(member.id);
+                                    setOpenCreateMultiSelect(true); // Mantener abierto
+                                  }}>
+                                  <Check className={cn("mr-2 h-4 w-4", formState.responsibleIds.includes(member.id) ? "opacity-100" : "opacity-0")} />
+                                  {member.email}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <Button type="submit" className="md:col-span-2 w-full">Crear Publicación</Button>
                 </form>
@@ -299,45 +420,54 @@ const AdminDashboard = () => {
               <CardTitle>Historial de Contenido</CardTitle>
             </CardHeader>
             <CardContent>
-              {/* ==================================
-                CAMBIO 2: Tabla solo para Desktop (md:block)
-                ==================================
-              */}
+              {/* Vista de Tabla para Desktop */}
               <div className="border rounded-lg overflow-x-auto hidden md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Contenido</TableHead>
-                      <TableHead>Responsable</TableHead>
+                      <TableHead>Responsable(s)</TableHead>
                       <TableHead>Plataforma</TableHead>
                       <TableHead>Publicar</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
+                      <TableHead>Progreso</TableHead>
+                      <TableHead>Editar</TableHead>
+                      <TableHead className="text-right">Estado</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center">Cargando contenido...</TableCell>
-                      </TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center">Cargando...</TableCell></TableRow>
                     ) : contentSchedule.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center">No hay contenido planeado.</TableCell>
-                      </TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center">No hay contenido.</TableCell></TableRow>
                     ) : (
                       contentSchedule.map(item => (
-                        <TableRow key={item.id}>
+                        <TableRow key={item.id} className={!item.isActive ? "opacity-50" : ""}>
                           <TableCell className="font-medium">{item.type}</TableCell>
-                          <TableCell>{item.responsibleEmail}</TableCell>
+                          <TableCell className="max-w-xs truncate">
+                            {item.responsibleEmails?.join(", ") || "N/A"}
+                          </TableCell>
                           <TableCell>{item.platform}</TableCell>
                           <TableCell>{item.publishDate || "N/A"}</TableCell>
                           <TableCell>
                             <Badge variant={getStatusVariant(item.status)}>{item.status}</Badge>
                           </TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteContent(item.id)}>
-                              <Trash className="h-4 w-4 text-destructive" />
+                          {/* --- BOTÓN DE EDITAR (DESKTOP) --- */}
+                          <TableCell>
+                            <Button variant="ghost" size="icon" onClick={() => handleOpenEditModal(item)}>
+                              <Pencil className="h-4 w-4" />
                             </Button>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end space-x-2">
+                              <Label htmlFor={`switch-${item.id}`} className="text-muted-foreground">
+                                {item.isActive ? "Activo" : "Inactivo"}
+                              </Label>
+                              <Switch
+                                id={`switch-${item.id}`}
+                                checked={item.isActive}
+                                onCheckedChange={() => handleToggleActive(item.id, item.isActive)}
+                              />
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))
@@ -345,22 +475,29 @@ const AdminDashboard = () => {
                   </TableBody>
                 </Table>
               </div>
-
-              {/* ==================================
-                CAMBIO 3: Cards solo para Móvil (md:hidden)
-                ==================================
-              */}
+              
+              {/* Vista de Cards para Móvil */}
               <div className="space-y-4 md:hidden">
                 {loading ? (
-                  <p className="text-center">Cargando contenido...</p>
+                  <p className="text-center">Cargando...</p>
                 ) : contentSchedule.length === 0 ? (
-                  <p className="text-center">No hay contenido planeado.</p>
+                  <p className="text-center">No hay contenido.</p>
                 ) : (
                   contentSchedule.map(item => (
-                    <Card key={item.id} className="w-full">
+                    <Card key={item.id} className={cn("w-full", !item.isActive && "opacity-60")}>
                       <CardHeader>
-                        <CardTitle className="text-lg">{item.type}</CardTitle>
-                        <CardDescription>{item.responsibleEmail}</CardDescription>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <CardTitle className="text-lg">{item.type}</CardTitle>
+                            <CardDescription className="pt-1">
+                              {item.responsibleEmails?.join(", ") || "N/A"}
+                            </CardDescription>
+                          </div>
+                          {/* --- BOTÓN DE EDITAR (MÓVIL) --- */}
+                          <Button variant="ghost" size="icon" onClick={() => handleOpenEditModal(item)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </CardHeader>
                       <CardContent className="space-y-3">
                         <div className="flex justify-between">
@@ -372,14 +509,27 @@ const AdminDashboard = () => {
                           <span className="font-semibold">{item.publishDate || "N/A"}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium text-muted-foreground">Estado:</span>
+                          <span className="text-sm font-medium text-muted-foreground">Progreso:</span>
                           <Badge variant={getStatusVariant(item.status)}>{item.status}</Badge>
                         </div>
-                        <div className="flex justify-end pt-2">
-                           <Button variant="ghost" size="icon" onClick={() => handleDeleteContent(item.id)}>
-                             <Trash className="h-4 w-4 text-destructive" />
-                           </Button>
+                        <div className="flex justify-between items-center pt-2 border-t">
+                           <span className="text-sm font-medium text-muted-foreground">Estado:</span>
+                           <div className="flex items-center space-x-2">
+                              <Label htmlFor={`switch-mobile-${item.id}`} className="text-sm">
+                                {item.isActive ? "Activo" : "Inactivo"}
+                              </Label>
+                              <Switch
+                                id={`switch-mobile-${item.id}`}
+                                checked={item.isActive}
+                                onCheckedChange={() => handleToggleActive(item.id, item.isActive)}
+                              />
+                            </div>
                         </div>
+                      {/* ==================================
+                        ¡AQUÍ ESTÁ LA CORRECCIÓN!
+                        Original: </Content>
+                        ==================================
+                      */}
                       </CardContent>
                     </Card>
                   ))
@@ -389,6 +539,96 @@ const AdminDashboard = () => {
           </Card>
         </div>
       </div>
+
+      {/* MODAL DE EDICIÓN */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="sm:max-w-[425px] md:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Editar Tarea</DialogTitle>
+            <DialogDescription>
+              Realiza cambios a la tarea. Haz clic en "Actualizar" al terminar.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdateTask} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-type">Tipo de Publicidad</Label>
+              <Input id="type" value={editFormState.type} onChange={handleEditFormChange} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-platform">Plataforma</Label>
+              <Select value={editFormState.platform} onValueChange={(v) => handleEditSelectChange("platform", v)} required>
+                <SelectTrigger id="platform"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Facebook">Facebook</SelectItem>
+                  <SelectItem value="Instagram">Instagram</SelectItem>
+                  <SelectItem value="TikTok">TikTok</SelectItem>
+                  <SelectItem value="YouTube">YouTube</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-publishDate">Fecha de Publicación</Label>
+              <Input id="publishDate" value={editFormState.publishDate} onChange={handleEditFormChange} type="date" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-format">Formato</Label>
+              <Input id="format" value={editFormState.format} onChange={handleEditFormChange} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-objective">Objetivo</Label>
+              <Input id="objective" value={editFormState.objective} onChange={handleEditFormChange} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-audience">Público Objetivo</Label>
+              <Input id="audience" value={editFormState.audience} onChange={handleEditFormChange} />
+            </div>
+            <div className="md:col-span-2 space-y-2">
+              <Label htmlFor="edit-contentIdea">Idea del Contenido</Label>
+              <Textarea id="contentIdea" value={editFormState.contentIdea} onChange={handleEditFormChange} required />
+            </div>
+            <div className="md:col-span-2 space-y-2">
+              <Label>Responsable(s)</Label>
+              <Popover open={openEditMultiSelect} onOpenChange={setOpenEditMultiSelect}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" className="w-full justify-between">
+                    <span className="truncate">
+                      {editFormState.responsibleIds.length === 0 && "Seleccionar miembros..."}
+                      {editFormState.responsibleIds.length === 1 && team.find(t => t.id === editFormState.responsibleIds[0])?.email}
+                      {editFormState.responsibleIds.length > 1 && `${editFormState.responsibleIds.length} miembros seleccionados`}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                  <Command>
+                    <CommandInput placeholder="Buscar miembro..." />
+                    <CommandList>
+                      <CommandEmpty>No se encontraron miembros.</CommandEmpty>
+                      <CommandGroup>
+                        {team.map(member => (
+                          <CommandItem key={member.id} value={member.email} onSelect={() => {
+                              handleEditMultiSelectChange(member.id);
+                              setOpenEditMultiSelect(true); // Mantener abierto
+                            }}>
+                            <Check className={cn("mr-2 h-4 w-4", editFormState.responsibleIds.includes(member.id) ? "opacity-100" : "opacity-0")} />
+                            {member.email}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <DialogFooter className="md:col-span-2">
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">Cancelar</Button>
+              </DialogClose>
+              <Button type="submit">Actualizar Tarea</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 };

@@ -101,8 +101,7 @@ const Galeria = () => {
           {/* Nota */}
           <div className="mt-8 p-4 bg-muted rounded-lg">
             <p className="text-sm text-muted-foreground text-center">
-              💡 <strong>Nota:</strong> Reemplaza estas imágenes y videos con tu contenido real
-              editando el archivo src/pages/Galeria.tsx
+               <strong></strong> IGLESIA CENTRO CRISTIANO VISIÓN PENTECOSTÉS
             </p>
           </div>
         </div>

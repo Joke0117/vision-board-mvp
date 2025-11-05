@@ -155,12 +155,11 @@ const AdminDashboard = () => {
     }
   };
   
-  // ¡AQUÍ ESTÁ LA CORRECCIÓN!
   const handleDeleteContent = async (contentId: string) => {
     if (window.confirm("¿Estás seguro de que quieres eliminar esta publicación?")) {
-      try { // <-- Se añade el {
+      try { 
         await deleteDoc(doc(db, "contentSchedule", contentId));
-      } catch (error) { // <-- Ahora 'error' es válido
+      } catch (error) { 
         console.error("Error al eliminar contenido: ", error);
       }
     }
@@ -177,14 +176,18 @@ const AdminDashboard = () => {
   };
 
   return (
-    // Usamos el nuevo AdminLayout
     <AdminLayout>
-      <div className="flex-1 space-y-8 p-8 pt-6">
+      {/* ==================================
+        CAMBIO 1: Padding responsivo aquí 
+        Original: className="flex-1 space-y-8 p-8 pt-6"
+        ==================================
+      */}
+      <div className="flex-1 space-y-8 px-4 py-6 md:px-8">
         <h1 className="text-3xl font-bold tracking-tight">
           Dashboard de Contenido
         </h1>
 
-        {/* Stats en vivo con borde de color */}
+        {/* Stats (Estas cards ya son responsivas) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="border-l-4 border-destructive dark:border-destructive">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -235,6 +238,7 @@ const AdminDashboard = () => {
                 </div>
               </AccordionTrigger>
               <AccordionContent>
+                {/* Este formulario ya es responsivo */}
                 <form onSubmit={handleSubmitContent} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-4">
                   <div className="space-y-2">
                     <Label htmlFor="type">Tipo de Publicidad</Label>
@@ -295,7 +299,11 @@ const AdminDashboard = () => {
               <CardTitle>Historial de Contenido</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="border rounded-lg overflow-hidden">
+              {/* ==================================
+                CAMBIO 2: Tabla solo para Desktop (md:block)
+                ==================================
+              */}
+              <div className="border rounded-lg overflow-x-auto hidden md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -336,6 +344,46 @@ const AdminDashboard = () => {
                     )}
                   </TableBody>
                 </Table>
+              </div>
+
+              {/* ==================================
+                CAMBIO 3: Cards solo para Móvil (md:hidden)
+                ==================================
+              */}
+              <div className="space-y-4 md:hidden">
+                {loading ? (
+                  <p className="text-center">Cargando contenido...</p>
+                ) : contentSchedule.length === 0 ? (
+                  <p className="text-center">No hay contenido planeado.</p>
+                ) : (
+                  contentSchedule.map(item => (
+                    <Card key={item.id} className="w-full">
+                      <CardHeader>
+                        <CardTitle className="text-lg">{item.type}</CardTitle>
+                        <CardDescription>{item.responsibleEmail}</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium text-muted-foreground">Plataforma:</span>
+                          <span className="font-semibold">{item.platform}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium text-muted-foreground">Publicar:</span>
+                          <span className="font-semibold">{item.publishDate || "N/A"}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium text-muted-foreground">Estado:</span>
+                          <Badge variant={getStatusVariant(item.status)}>{item.status}</Badge>
+                        </div>
+                        <div className="flex justify-end pt-2">
+                           <Button variant="ghost" size="icon" onClick={() => handleDeleteContent(item.id)}>
+                             <Trash className="h-4 w-4 text-destructive" />
+                           </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>

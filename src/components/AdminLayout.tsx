@@ -1,5 +1,6 @@
+// src/components/AdminLayout.tsx
 import * as React from "react";
-import { Link, useLocation, Outlet } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ import logo from "@/assets/multimedia-logo.png";
 import { ThemeToggle } from "./ThemeToggle";
 import { HamburgerMenu } from "./HamburgerMenu";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils"; // <-- Importa cn
 
 export const AdminLayout = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
@@ -66,17 +68,30 @@ export const AdminLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <SidebarProvider defaultOpen={true} open={isMobile ? open : undefined} onOpenChange={isMobile ? setOpen : undefined}>
+      
+      {/* =CAMBIO 1: Header Fijo para Móvil (Solo Hamburguesa y Logo) =*/}
       {isMobile && (
-        <div className="fixed top-4 left-4 z-50">
+        <header className="fixed top-0 left-0 right-0 h-16 bg-background border-b border-border/70 z-40 flex items-center justify-between px-4 md:hidden">
+          {/* Botón de Hamburguesa */}
           <HamburgerMenu isOpen={open} onClick={() => setOpen(!open)} />
-        </div>
+
+          {/* Logo Icono */}
+          <Link to="/admin-dashboard">
+            <img src={logo} alt="Logo" className="h-10 w-10" />
+          </Link>
+        </header>
       )}
+
       <Sidebar
         variant="sidebar"
         collapsible="icon"
-        className="border-r border-border/70"
+        // =CAMBIO 2: Poner el panel debajo del header en móvil (top-16) =
+        className={cn(
+          "border-r border-border/70",
+          isMobile && "top-16" 
+        )}
       >
-        {/* --- CAMBIO: Añadido "flex-row" y "justify-start" --- */}
+        {/* =CAMBIO 3: El Header del PANEL se ve siempre =*/}
         <SidebarHeader className="h-20 flex flex-row items-center justify-start px-4 gap-3 border-b border-border/70 pt-6 pb-4">
           <img src={logo} alt="Logo" className="h-12 w-12 shrink-0" />
           <h2 className="font-bold text-lg bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent group-data-[collapsible=icon]:hidden">
@@ -84,7 +99,6 @@ export const AdminLayout = ({ children }: { children: React.ReactNode }) => {
           </h2>
         </SidebarHeader>
 
-        {/* El footer ya está arreglado (flex-1 en SidebarContent) */}
         <SidebarContent className="py-4 flex-1">
           <SidebarMenu className="px-2">
             {menuItems.map((item) => (
@@ -96,7 +110,7 @@ export const AdminLayout = ({ children }: { children: React.ReactNode }) => {
                 >
                   <Link to={item.path}>
                     <item.icon />
-                    <span>{item.name}</span>
+                    <span className="text-base">{item.name}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -104,6 +118,7 @@ export const AdminLayout = ({ children }: { children: React.ReactNode }) => {
           </SidebarMenu>
         </SidebarContent>
 
+        {/* =CAMBIO 4: El Footer del PANEL se ve siempre =*/}
         <SidebarFooter className="p-2 border-t border-border/70">
           <ThemeToggle />
           <DropdownMenu>
@@ -137,6 +152,7 @@ export const AdminLayout = ({ children }: { children: React.ReactNode }) => {
         </SidebarFooter>
       </Sidebar>
 
+      {/* Esto empuja el CONTENIDO de la página (children), está perfecto */}
       <SidebarInset className={isMobile ? "pt-16" : ""}>{children}</SidebarInset>
     </SidebarProvider>
   );

@@ -53,7 +53,7 @@ exports.onTaskCreatedSendNotifications = functions.firestore
 
         <tr>
             <td style="padding: 10px 30px 20px 30px;">
-                <h1 style="font-size: 24px; color: #333; margin-bottom: 10px;">¡Nueva Tarea Asignada! 🔔</h1>
+                <h1 style="font-size: 24px; color: #333; margin-bottom: 10px;">¡Nueva Tarea Asignada! ✅</h1>
                 <p style="font-size: 16px; color: #555; line-height: 1.6;">
                     ¡Hola equipo! Se ha programado y asignado una nueva tarea en su Vision Board. ¡Manos a la obra!
                 </p>

@@ -101,6 +101,16 @@ exports.onTaskCreatedSendNotifications = functions.firestore
             `,
         };
 
+        // AÑADE ESTA LÍNEA DE LOG ANTES DEL TRY
+console.log("INTENTO DE ENVIO INICIADO");
+
+try {
+    await mailTransport.sendMail(mailOptions);
+    console.log("Emails enviados exitosamente a:", emails.join(","));
+} catch (error) {
+    console.error("Error al enviar email:", error);
+}
+
         try {
             await mailTransport.sendMail(mailOptions);
             console.log("Emails enviados exitosamente a:", emails.join(","));

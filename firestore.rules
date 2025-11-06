@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Permite a CUALQUIER usuario que haya iniciado sesión leer y escribir.
+    // Esto es para que podamos probar la app.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

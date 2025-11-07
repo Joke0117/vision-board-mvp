@@ -36,7 +36,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.onTaskCreatedSendNotifications = void 0;
 const admin = __importStar(require("firebase-admin"));
 const nodemailer = __importStar(require("nodemailer"));
-// Importación del trigger V2: onDocumentCreated
 const firestore_1 = require("firebase-functions/v2/firestore");
 admin.initializeApp();
 // Configuración de marca y URLs (Variables globales)
@@ -122,7 +121,7 @@ exports.onTaskCreatedSendNotifications = (0, firestore_1.onDocumentCreated)(
         </tr>
 
         <tr>
-            <td align="center" style="padding: 20px 30px; border-top: 1px solid #ddd; background-color: #f0f0f0; border-radius: 0 0 8px 8px;">
+            <td align="center" style="padding: 20px 30px; border-top: 1px solid #ddd; background-color: ${LIGHT_GRAY}; border-radius: 0 0 8px 8px;">
                 <p style="font-size: 12px; color: #777; margin-bottom: 5px;">
                     © ${new Date().getFullYear()} Multimedia Visión Pentecostés. Todos los derechos reservados.
                 </p>

@@ -23,11 +23,16 @@ const LIGHT_GRAY = "#f0f0f0";
 
 // Función principal (Cloud Function V2)
 export const onTaskCreatedSendNotifications = onDocumentCreated(
-    // Especificamos la ruta del documento y la región (us-central1)
-    { document: "contentSchedule/{contentId}", region: "us-central1" }, 
+    // Especificamos la ruta del documento, la región (us-central1)
+    // Y AÑADIMOS LA CONFIGURACIÓN DE 'secrets' AQUÍ:
+    {
+        document: "contentSchedule/{contentId}",
+        region: "us-central1",
+        secrets: ["SENDGRID_KEY"] // ¡ESTA ES LA LÍNEA MÁGICA!
+    },
     async (event) => {
 
-        // 🛑 LECTURA DE CLAVE CORREGIDA: Usando process.env (V2)
+        // Ahora, process.env.SENDGRID_KEY tendrá el valor de tu secreto
         const SENDGRID_API_KEY = process.env.SENDGRID_KEY; 
 
         // Inicializa el transportador solo durante la ejecución
@@ -50,8 +55,9 @@ export const onTaskCreatedSendNotifications = onDocumentCreated(
             return null;
         }
         
+        // Esta comprobación sigue siendo útil por si acaso, aunque con secrets[] debería ser inusual.
         if (!SENDGRID_API_KEY) {
-            console.error("Error: SENDGRID_KEY no está definida en el entorno.");
+            console.error("Error: SENDGRID_KEY no está definida en el entorno. (¡Algo salió mal con el Secret Manager!)");
             return null;
         }
         

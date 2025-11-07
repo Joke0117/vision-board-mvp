@@ -351,6 +351,7 @@ const AdminDashboard = () => {
                         <SelectItem value="Instagram">Instagram</SelectItem>
                         <SelectItem value="TikTok">TikTok</SelectItem>
                         <SelectItem value="YouTube">YouTube</SelectItem>
+                        <SelectItem value="YouTube">Whatsapp</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

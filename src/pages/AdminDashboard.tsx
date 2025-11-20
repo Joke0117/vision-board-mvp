@@ -1,6 +1,6 @@
 // src/pages/AdminDashboard.tsx
 import * as React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -42,7 +42,11 @@ import {
 import { collection, addDoc, getDocs, doc, query, Timestamp, onSnapshot, orderBy, updateDoc } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 import { useAuth } from "@/hooks/useAuth";
-import { PlusCircle, Users, BarChart, Clock, CheckCircle, ChevronsUpDown, Check, Pencil } from "lucide-react";
+import { 
+  PlusCircle, Users, BarChart, Clock, CheckCircle, 
+  ChevronsUpDown, Check, Pencil, UserCheck, Filter, 
+  X, ClipboardList, PlayCircle, CheckCircle2
+} from "lucide-react"; 
 import { cn } from "@/lib/utils";
 
 // Interfaz para el usuario del equipo
@@ -82,6 +86,9 @@ const AdminDashboard = () => {
   // Estado para el modal de Edición
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentTask, setCurrentTask] = useState<Content | null>(null);
+
+  // Estado para el filtro de usuario individual
+  const [selectedMemberId, setSelectedMemberId] = useState<string>("all");
 
   const [stats, setStats] = useState({
     planned: 0,
@@ -153,6 +160,25 @@ const AdminDashboard = () => {
 
     return () => unsubscribe();
   }, []);
+
+  // --- Cálculos derivados para el monitor individual ---
+  const memberStats = useMemo(() => {
+    if (selectedMemberId === "all") return null;
+
+    // Filtramos asegurando que responsibleIds exista para evitar errores
+    const memberTasks = contentSchedule.filter(t => 
+      (t.responsibleIds || []).includes(selectedMemberId) && t.isActive
+    );
+
+    return {
+      total: memberTasks.length,
+      planned: memberTasks.filter(t => t.status === "Planeado" || t.status === "Revisión").length,
+      inProgress: memberTasks.filter(t => t.status === "En Progreso").length,
+      published: memberTasks.filter(t => t.status === "Publicado").length,
+      tasks: memberTasks
+    };
+  }, [selectedMemberId, contentSchedule]);
+
 
   // --- Funciones para el formulario de CREAR ---
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -285,7 +311,7 @@ const AdminDashboard = () => {
           Dashboard de Contenido
         </h1>
 
-        {/* CARDS DE STATS */}
+        {/* CARDS DE STATS GENERALES */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="border-l-4 border-destructive dark:border-destructive">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -325,7 +351,162 @@ const AdminDashboard = () => {
           </Card>
         </div>
 
-        {/* Formulario desplegable y Tabla */}
+        {/* === MONITOR DE DESEMPEÑO INDIVIDUAL MEJORADO === */}
+        <Card className="bg-muted/30 border-dashed border-2 relative overflow-hidden">
+            <CardHeader className="pb-4">
+                <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between z-10 relative">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-background rounded-lg border shadow-sm">
+                           <UserCheck className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                            <CardTitle>Monitor Individual</CardTitle>
+                            <CardDescription>Despliegue de métricas por miembro</CardDescription>
+                        </div>
+                    </div>
+                    
+                    {/* Controles: Select + Botón Cerrar */}
+                    <div className="flex items-center gap-2 w-full md:w-auto">
+                        <div className="w-full md:w-[280px]">
+                            <Select value={selectedMemberId} onValueChange={setSelectedMemberId}>
+                                <SelectTrigger className="bg-background">
+                                    <SelectValue placeholder="Seleccionar miembro..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">-- Seleccionar Usuario --</SelectItem>
+                                    {team.map((member) => (
+                                        <SelectItem key={member.id} value={member.id}>
+                                            {member.email}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {/* Botón X para cerrar */}
+                        {selectedMemberId !== "all" && (
+                            <Button 
+                                variant="outline" 
+                                size="icon" 
+                                onClick={() => setSelectedMemberId("all")}
+                                className="bg-background shrink-0"
+                                title="Cerrar vista"
+                            >
+                                <X className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            </CardHeader>
+            
+            {/* Despliegue animado de contenido */}
+            {selectedMemberId !== "all" && memberStats && (
+                <CardContent className="space-y-6 animate-in slide-in-from-top-4 duration-500 fade-in-20">
+                    
+                    {/* Grid de Tarjetas Bonitas */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {/* Card Total */}
+                        <Card className="bg-background shadow-sm border-l-4 border-l-blue-500 hover:shadow-md transition-shadow">
+                            <CardContent className="p-4 flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase">Asignadas</p>
+                                    <div className="text-2xl font-bold text-blue-600 mt-1">{memberStats.total}</div>
+                                </div>
+                                <div className="p-2 bg-blue-50 rounded-full">
+                                    <ClipboardList className="h-5 w-5 text-blue-500" />
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Card Pendientes */}
+                        <Card className="bg-background shadow-sm border-l-4 border-l-red-500 hover:shadow-md transition-shadow">
+                            <CardContent className="p-4 flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase">Pendientes</p>
+                                    <div className="text-2xl font-bold text-red-600 mt-1">{memberStats.planned}</div>
+                                </div>
+                                <div className="p-2 bg-red-50 rounded-full">
+                                    <Clock className="h-5 w-5 text-red-500" />
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Card En Progreso */}
+                        <Card className="bg-background shadow-sm border-l-4 border-l-yellow-500 hover:shadow-md transition-shadow">
+                            <CardContent className="p-4 flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase">En Curso</p>
+                                    <div className="text-2xl font-bold text-yellow-600 mt-1">{memberStats.inProgress}</div>
+                                </div>
+                                <div className="p-2 bg-yellow-50 rounded-full">
+                                    <PlayCircle className="h-5 w-5 text-yellow-500" />
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Card Completadas */}
+                        <Card className="bg-background shadow-sm border-l-4 border-l-green-500 hover:shadow-md transition-shadow">
+                            <CardContent className="p-4 flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase">Listas</p>
+                                    <div className="text-2xl font-bold text-green-600 mt-1">{memberStats.published}</div>
+                                </div>
+                                <div className="p-2 bg-green-50 rounded-full">
+                                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Tabla Mejorada con Título Personalizado */}
+                    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                        <div className="p-3 border-b bg-muted/30 flex items-center gap-2">
+                            <Filter className="h-4 w-4 text-muted-foreground" />
+                            <h3 className="font-semibold text-sm">
+                                Tareas de {team.find(t => t.id === selectedMemberId)?.email}
+                            </h3>
+                        </div>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Tipo</TableHead>
+                                    <TableHead>Idea / Descripción</TableHead>
+                                    <TableHead>Fecha</TableHead>
+                                    <TableHead className="text-right">Estado Actual</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {memberStats.tasks.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <CheckCircle className="h-8 w-8 text-muted-foreground/30" />
+                                                <span>Todo limpio. No hay tareas activas asignadas.</span>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    memberStats.tasks.map(task => (
+                                        <TableRow key={task.id} className="hover:bg-muted/50">
+                                            <TableCell className="font-medium">{task.type}</TableCell>
+                                            <TableCell className="text-muted-foreground max-w-[200px] md:max-w-[300px] truncate" title={task.contentIdea}>
+                                                {task.contentIdea}
+                                            </TableCell>
+                                            <TableCell>{task.publishDate || <span className="text-muted-foreground text-xs italic">Sin fecha</span>}</TableCell>
+                                            <TableCell className="text-right">
+                                                 <Badge variant={getStatusVariant(task.status)} className="shadow-none">{task.status}</Badge>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </CardContent>
+            )}
+        </Card>
+        {/* === FIN SECCIÓN MONITOR === */}
+
+        {/* Formulario desplegable y Tabla General */}
         <div className="space-y-8">
           <Accordion type="single" collapsible className="w-full">
             <AccordionItem value="item-1">
@@ -415,10 +596,10 @@ const AdminDashboard = () => {
             </AccordionItem>
           </Accordion>
 
-          {/* Tabla de Contenido */}
+          {/* Tabla de Contenido General */}
           <Card>
             <CardHeader>
-              <CardTitle>Historial de Contenido</CardTitle>
+              <CardTitle>Historial Global</CardTitle>
             </CardHeader>
             <CardContent>
               {/* Vista de Tabla para Desktop */}
@@ -526,11 +707,6 @@ const AdminDashboard = () => {
                               />
                             </div>
                         </div>
-                      {/* ==================================
-                        ¡AQUÍ ESTÁ LA CORRECCIÓN!
-                        Original: </Content>
-                        ==================================
-                      */}
                       </CardContent>
                     </Card>
                   ))
@@ -539,7 +715,7 @@ const AdminDashboard = () => {
             </CardContent>
           </Card>
         </div>
-      </div>
+      </div> {/* --- CIERRE DEL DIV PRINCIPAL (flex-1 space-y-8) --- */}
 
       {/* MODAL DE EDICIÓN */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>

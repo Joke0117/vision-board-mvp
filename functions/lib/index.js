@@ -39,9 +39,10 @@ const nodemailer = __importStar(require("nodemailer"));
 const firestore_1 = require("firebase-functions/v2/firestore");
 admin.initializeApp();
 // Configuración de marca y URLs (Variables globales)
-const LOGO_URL = "https://firebasestorage.googleapis.com/v0/b/multimedia-icvp.appspot.com/o/multimedia-logo.png?alt=media&token=439e6e68-c672-4860-ae45-bf5dbddf3acb";
+const LOGO_URL = "https://firebasestorage.googleapis.com/v0/b/multimedia-icvp.firebasestorage.app/o/multimedia-logo.png?alt=media&token=376837ef-50fb-45ee-a1ca-90492ddefa0a";
 const FROM_EMAIL = '"Multimedia Visión Pentecostés" <notificaciones@multidiavisionpentecostes.online>';
 const PANEL_URL = "https://adminmultimediavisionpentacostes.netlify.app/mi-contenido";
+const ICONO_TAREA = "https://firebasestorage.googleapis.com/v0/b/multimedia-icvp.firebasestorage.app/o/tarea-asignada.png?alt=media&token=d4e21adc-5c7c-4868-8249-5d54b97249c1";
 const PRIMARY_COLOR = "#3B82F6";
 const LIGHT_GRAY = "#f0f0f0";
 // Función principal (Cloud Function V2)
@@ -94,9 +95,13 @@ exports.onTaskCreatedSendNotifications = (0, firestore_1.onDocumentCreated)(
 
         <tr>
             <td style="padding: 10px 30px 20px 30px;">
-                <h1 style="font-size: 24px; color: #333; margin-bottom: 10px;">¡Nueva Tarea Asignada! ✅</h1>
+                <!-- ICONO DE TAREA ASIGNADA DENTRO DEL H1 -->
+                <h1 style="font-size: 24px; color: #333; margin-bottom: 10px;">
+                    <img src="${ICONO_TAREA}" alt="Icono de tarea" style="vertical-align: middle; width: 28px; height: 28px; margin-right: 8px;">
+                    ¡Nueva Tarea Asignada!
+                </h1>
                 <p style="font-size: 16px; color: #555; line-height: 1.6;">
-                    ¡Hola equipo! Se ha programado y asignado una nueva tarea en su Vision Board. ¡Manos a la obra!
+                    ¡Hola equipo! Se ha programado y asignado una nueva tarea en su **Planificador de Contenido**. ¡Manos a la obra!
                 </p>
                 
                 <div style="background-color: ${LIGHT_GRAY}; border-left: 4px solid ${PRIMARY_COLOR}; border-radius: 5px; padding: 15px; margin-top: 25px;">
@@ -116,7 +121,7 @@ exports.onTaskCreatedSendNotifications = (0, firestore_1.onDocumentCreated)(
                 
                 <div style="text-align: center; margin: 30px 0;">
                     <a href="${PANEL_URL}" target="_blank" style="background-color: ${PRIMARY_COLOR}; color: #ffffff; padding: 15px 30px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-                        🖥️ IR A MIS TAREAS ASIGNADAS
+                        IR A MIS TAREAS ASIGNADAS
                     </a>
                 </div>
 

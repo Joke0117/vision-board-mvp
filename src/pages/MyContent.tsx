@@ -9,23 +9,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { collection, query, onSnapshot, doc, updateDoc, Timestamp, orderBy, where } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 import { useAuth } from "@/hooks/useAuth";
-import { CalendarCheck, Star, Hourglass, CheckCircle } from "lucide-react";
+import { 
+  Clock, 
+  PlayCircle, 
+  CheckCircle2, 
+  Lock,
+  AlertCircle
+} from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Label } from "@/components/ui/label"; // <-- Importar Label para móvil
+import { Label } from "@/components/ui/label";
+import { addDays, isAfter, parseISO, startOfDay } from "date-fns";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-// Interfaz para el contenido (actualizada)
+// Interfaz para el contenido
 interface Content {
   id: string;
   type: string;
   platform: string;
   publishDate: string;
   contentIdea: string;
-  
-  // --- CAMPOS ACTUALIZADOS ---
   responsibleIds: string[];
   responsibleEmails: string[];
   isActive: boolean;
-  
   status: "Planeado" | "En Progreso" | "Publicado" | "Revisión";
   createdAt: Timestamp;
 }
@@ -45,14 +50,9 @@ const MyContent = () => {
 
     setLoading(true);
 
-    // ==================================
-    // LÓGICA DE CONSULTA CORREGIDA
-    // ==================================
     const userContentQuery = query(
       collection(db, "contentSchedule"),
-      // 1. Buscar tu ID dentro del array 'responsibleIds'
       where("responsibleIds", "array-contains", user.uid),
-      // 2. Traer SOLO las tareas que están activas
       where("isActive", "==", true),
       orderBy("publishDate", "desc")
     );
@@ -78,11 +78,7 @@ const MyContent = () => {
       });
       setLoading(false);
     }, (error) => {
-      console.error("Error en la consulta de Firestore:", error);
-      if (error.code === 'failed-precondition') {
-        console.warn("--- ADVERTENCIA DE FIREBASE ---");
-        console.warn("Se necesita un índice compuesto. Por favor, crea el índice usando el enlace que debe aparecer en la consola de tu navegador.");
-      }
+      console.error("Error en Firestore:", error);
       setLoading(false);
     });
 
@@ -100,66 +96,90 @@ const MyContent = () => {
     }
   };
 
+  // --- Lógica de Bloqueo (24h después de la fecha de publicación) ---
+  const isTaskLocked = (publishDateString: string) => {
+    if (!publishDateString) return false;
+    const today = new Date();
+    const publishDate = parseISO(publishDateString);
+    // Sumamos 1 día (24 horas) a la fecha de publicación
+    const deadline = addDays(publishDate, 1); 
+    // Si hoy es DESPUÉS de la fecha límite, bloqueamos
+    return isAfter(today, deadline);
+  };
+
   const getStatusVariant = (status: Content['status']) => {
     switch (status) {
       case 'Publicado': return 'default';
       case 'En Progreso': return 'secondary';
       case 'Planeado': return 'destructive';
       case 'Revisión': return 'outline';
-      default: 'outline';
+      default: return 'outline';
     }
   };
 
   return (
     <UserLayout>
-      {/* Padding responsivo */}
       <div className="flex-1 space-y-6 md:space-y-8 p-4 md:p-8 pt-4 md:pt-6">
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
-          Mi Dashboard de Contenido
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+            Mi Dashboard de Contenido
+          </h1>
+        </div>
 
-        {/* Stats de usuario (ya eran responsivas) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-          <Card className="border-l-4 border-destructive dark:border-destructive">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-medium">Tareas Pendientes</CardTitle>
-              <Hourglass className="h-5 w-5 text-destructive" />
-            </CardHeader>
-            <CardContent className="pt-4">
-              <div className="text-3xl font-bold">{stats.pendingTasks}</div>
-            </CardContent>
-          </Card>
-          <Card className="border-l-4 border-yellow-500 dark:border-yellow-400">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-medium">En Progreso</CardTitle>
-              <Star className="h-5 w-5 text-yellow-500 dark:text-yellow-400" />
-            </CardHeader>
-            <CardContent className="pt-4">
-              <div className="text-3xl font-bold">{stats.inProgressTasks}</div>
-            </CardContent>
-          </Card>
-          <Card className="border-l-4 border-primary dark:border-primary">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-medium">Tareas Completadas</CardTitle>
-              <CheckCircle className="h-5 w-5 text-primary" />
-            </CardHeader>
-            <CardContent className="pt-4">
-              <div className="text-3xl font-bold">{stats.completedTasks}</div>
-            </CardContent>
-          </Card>
+        {/* --- CARDS DE ESTADÍSTICAS (ESTILO NUEVO) --- */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            
+            {/* Card Pendientes */}
+            <Card className="bg-background shadow-sm border-l-4 border-l-red-500 hover:shadow-md transition-shadow">
+                <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase">Tareas Pendientes</p>
+                        <div className="text-2xl font-bold text-red-600 mt-1">{stats.pendingTasks}</div>
+                    </div>
+                    <div className="p-3 bg-red-50 rounded-full">
+                        <Clock className="h-6 w-6 text-red-500" />
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Card En Progreso */}
+            <Card className="bg-background shadow-sm border-l-4 border-l-yellow-500 hover:shadow-md transition-shadow">
+                <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase">En Progreso</p>
+                        <div className="text-2xl font-bold text-yellow-600 mt-1">{stats.inProgressTasks}</div>
+                    </div>
+                    <div className="p-3 bg-yellow-50 rounded-full">
+                        <PlayCircle className="h-6 w-6 text-yellow-500" />
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Card Completadas */}
+            <Card className="bg-background shadow-sm border-l-4 border-l-green-500 hover:shadow-md transition-shadow">
+                <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase">Completadas</p>
+                        <div className="text-2xl font-bold text-green-600 mt-1">{stats.completedTasks}</div>
+                    </div>
+                    <div className="p-3 bg-green-50 rounded-full">
+                        <CheckCircle2 className="h-6 w-6 text-green-500" />
+                    </div>
+                </CardContent>
+            </Card>
         </div>
 
         <Card>
           <CardHeader>
             <CardTitle>Mis Asignaciones</CardTitle>
             <CardDescription>
-              Aquí puedes ver y actualizar el estado de las publicaciones que te han sido asignadas.
+              Gestiona tus tareas asignadas. Tienes hasta 24 horas después de la fecha para actualizar el estado.
             </CardDescription>
           </CardHeader>
           <CardContent>
             
             {/* ==================================
-              VISTA DE TABLA (SOLO DESKTOP)
+              VISTA DE TABLA (DESKTOP)
               ==================================
             */}
             <div className="border rounded-lg overflow-x-auto hidden md:block">
@@ -176,42 +196,71 @@ const MyContent = () => {
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center">Cargando tu contenido...</TableCell>
+                      <TableCell colSpan={5} className="text-center py-8">Cargando tu contenido...</TableCell>
                     </TableRow>
                   ) : content.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center">¡No tienes contenido asignado!</TableCell>
+                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                         ¡Estás libre! No tienes tareas asignadas.
+                      </TableCell>
                     </TableRow>
                   ) : (
                     content.map(item => {
+                      const locked = isTaskLocked(item.publishDate);
+
                       return (
-                        <TableRow key={item.id}>
+                        <TableRow key={item.id} className={locked ? "bg-muted/30" : ""}>
                           <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              <span>{item.type}</span>
+                            <div className="flex flex-col">
+                              <span className="font-semibold">{item.type}</span>
+                              <span className="text-xs text-muted-foreground truncate max-w-[250px]" title={item.contentIdea}>
+                                {item.contentIdea}
+                              </span>
                             </div>
-                            <p className="text-sm text-muted-foreground mt-1 ml-6">{item.contentIdea}</p>
                           </TableCell>
                           <TableCell>{item.platform}</TableCell>
-                          <TableCell>{item.publishDate || "N/A"}</TableCell>
+                          <TableCell>
+                             <div className="flex items-center gap-2">
+                                {item.publishDate || "N/A"}
+                                {locked && (
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger>
+                                                <AlertCircle className="h-4 w-4 text-destructive" />
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <p>Tarea vencida hace más de 24h</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                )}
+                             </div>
+                          </TableCell>
                           <TableCell>
                             <Badge variant={getStatusVariant(item.status)}>{item.status}</Badge>
                           </TableCell>
                           <TableCell>
-                            <Select 
-                              value={item.status} 
-                              onValueChange={(newStatus) => handleStatusChange(item.id, newStatus as Content['status'])}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Cambiar estado" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Planeado">Planeado</SelectItem>
-                                <SelectItem value="En Progreso">En Progreso</SelectItem>
-                                <SelectItem value="Revisión">En Revisión</SelectItem>
-                                <SelectItem value="Publicado">Publicado</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            {locked ? (
+                                <div className="flex items-center text-muted-foreground text-sm gap-2 bg-muted px-3 py-2 rounded-md border">
+                                    <Lock className="h-4 w-4" />
+                                    <span>Cerrado</span>
+                                </div>
+                            ) : (
+                                <Select 
+                                    value={item.status} 
+                                    onValueChange={(newStatus) => handleStatusChange(item.id, newStatus as Content['status'])}
+                                >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Cambiar estado" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Planeado">Planeado</SelectItem>
+                                    <SelectItem value="En Progreso">En Progreso</SelectItem>
+                                    <SelectItem value="Revisión">En Revisión</SelectItem>
+                                    <SelectItem value="Publicado">Publicado</SelectItem>
+                                </SelectContent>
+                                </Select>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
@@ -222,54 +271,72 @@ const MyContent = () => {
             </div>
 
             {/* ==================================
-              VISTA DE CARDS (SOLO MÓVIL)
+              VISTA DE CARDS (MÓVIL)
               ==================================
             */}
             <div className="space-y-4 md:hidden">
               {loading ? (
-                <p className="text-center">Cargando tu contenido...</p>
+                <p className="text-center py-4">Cargando tu contenido...</p>
               ) : content.length === 0 ? (
-                <p className="text-center">¡No tienes contenido asignado!</p>
+                <p className="text-center py-4 text-muted-foreground">¡No tienes contenido asignado!</p>
               ) : (
-                content.map(item => (
-                  <Card key={item.id} className="w-full">
-                    <CardHeader>
-                      <CardTitle className="text-lg">{item.type}</CardTitle>
-                      <CardDescription>{item.contentIdea}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="flex justify-between">
-                        <span className="text-sm font-medium text-muted-foreground">Plataforma:</span>
-                        <span className="font-semibold">{item.platform}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm font-medium text-muted-foreground">Fecha Pub.:</span>
-                        <span className="font-semibold">{item.publishDate || "N/A"}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-muted-foreground">Estado:</span>
-                        <Badge variant={getStatusVariant(item.status)}>{item.status}</Badge>
-                      </div>
-                      <div className="space-y-2 pt-2">
-                         <Label>Actualizar Estado</Label>
-                         <Select 
-                            value={item.status} 
-                            onValueChange={(newStatus) => handleStatusChange(item.id, newStatus as Content['status'])}
-                         >
-                           <SelectTrigger>
-                             <SelectValue placeholder="Cambiar estado" />
-                           </SelectTrigger>
-                           <SelectContent>
-                             <SelectItem value="Planeado">Planeado</SelectItem>
-                             <SelectItem value="En Progreso">En Progreso</SelectItem>
-                             <SelectItem value="Revisión">En Revisión</SelectItem>
-                             <SelectItem value="Publicado">Publicado</SelectItem>
-                           </SelectContent>
-                         </Select>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
+                content.map(item => {
+                   const locked = isTaskLocked(item.publishDate);
+                   
+                   return (
+                    <Card key={item.id} className={cn("w-full border-l-4 shadow-sm", locked ? "border-l-muted bg-muted/10" : "border-l-primary")}>
+                        <CardHeader className="pb-2">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <CardTitle className="text-lg">{item.type}</CardTitle>
+                                <CardDescription className="line-clamp-2">{item.contentIdea}</CardDescription>
+                            </div>
+                            {locked && <Lock className="h-5 w-5 text-muted-foreground" />}
+                        </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3 pt-2">
+                        <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Plataforma:</span>
+                            <span className="font-medium">{item.platform}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Fecha:</span>
+                            <span className={cn("font-medium", locked && "text-destructive")}>
+                                {item.publishDate || "N/A"}
+                            </span>
+                        </div>
+                        
+                        <div className="pt-2 border-t mt-2">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-sm font-medium text-muted-foreground">Estado Actual:</span>
+                                <Badge variant={getStatusVariant(item.status)}>{item.status}</Badge>
+                            </div>
+                            
+                            {locked ? (
+                                <div className="w-full bg-muted text-muted-foreground text-center py-2 rounded text-sm flex items-center justify-center gap-2">
+                                    <Lock className="h-3 w-3" /> Edición bloqueada (Vencida)
+                                </div>
+                            ) : (
+                                <Select 
+                                    value={item.status} 
+                                    onValueChange={(newStatus) => handleStatusChange(item.id, newStatus as Content['status'])}
+                                >
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Actualizar estado" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Planeado">Planeado</SelectItem>
+                                    <SelectItem value="En Progreso">En Progreso</SelectItem>
+                                    <SelectItem value="Revisión">En Revisión</SelectItem>
+                                    <SelectItem value="Publicado">Publicado</SelectItem>
+                                </SelectContent>
+                                </Select>
+                            )}
+                        </div>
+                        </CardContent>
+                    </Card>
+                   );
+                })
               )}
             </div>
 

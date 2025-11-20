@@ -75,6 +75,7 @@ export const teamsData: TeamData[] = [
       { name: "Yerlis Bohórquez" },
       { name: "Linet Salcedo" },
       { name: "Yuribel Pinto" },
+      { name: "Mileidys Payares"}
     ],
     responsibilities: [
       "Interceder en oración por el equipo y sus actividades",

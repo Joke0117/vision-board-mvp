@@ -23,7 +23,7 @@ export const Navbar = () => {
 
   // Links condicionales actualizados
   const userLinks = [
-    { name: "Mi Contenido", path: "/mi-contenido", icon: CalendarCheck }, // <-- CAMBIADO
+    { name: "Mis Tareas", path: "/mi-contenido", icon: CalendarCheck }, // <-- CAMBIADO
   ];
 
   const adminLinks = [

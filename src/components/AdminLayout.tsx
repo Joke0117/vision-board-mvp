@@ -58,7 +58,7 @@ export const AdminLayout = ({ children }: { children: React.ReactNode }) => {
 
   const menuItems = [
     { name: "Dashboard", path: "/admin-dashboard", icon: LayoutDashboard },
-    { name: "Mi Contenido", path: "/mi-contenido", icon: CalendarCheck },
+    { name: "Mis Tareas", path: "/mi-contenido", icon: CalendarCheck },
     { name: "Equipo", path: "/", icon: Home },
     { name: "Organigrama", path: "/organigrama", icon: Users },
     { name: "Logros y Metas", path: "/logros-metas", icon: BarChart2 },

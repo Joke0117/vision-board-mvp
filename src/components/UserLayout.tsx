@@ -180,7 +180,7 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
 
   // Definición del menú con lógica condicional para Admin
   const menuItems = [
-    { name: "Mi Contenido", path: "/mi-contenido", icon: CalendarCheck },
+    { name: "Mis tareas", path: "/mi-contenido", icon: CalendarCheck },
     { name: "Equipo", path: "/", icon: Home },
     { name: "Organigrama", path: "/organigrama", icon: Users },
     { name: "Logros y Metas", path: "/logros-metas", icon: BarChart2 },

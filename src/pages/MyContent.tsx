@@ -1,6 +1,6 @@
 // src/pages/MyContent.tsx
 import * as React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { UserLayout } from "@/components/UserLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -14,11 +14,13 @@ import {
   PlayCircle, 
   CheckCircle2, 
   Lock,
-  AlertCircle
+  AlertCircle,
+  Trophy,
+  Star
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
-import { addDays, isAfter, parseISO } from "date-fns";
+import { addDays, isAfter, parseISO, startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Interfaz actualizada para el contenido
@@ -96,6 +98,58 @@ const MyContent = () => {
     return () => unsubscribe();
   }, [user]);
 
+  // --- CÁLCULO DE RENDIMIENTO SEMANAL ---
+  const weeklyPerformance = useMemo(() => {
+    const now = new Date();
+    // Obtenemos lunes y domingo de la semana actual
+    const start = startOfWeek(now, { weekStartsOn: 1 }); 
+    const end = endOfWeek(now, { weekStartsOn: 1 });
+
+    // Filtramos las tareas de ESTA SEMANA (o recurrentes activas)
+    const weeklyTasks = content.filter(task => {
+        // 1. Si es recurrente y está activa, cuenta para la semana
+        if (task.recurrenceDays && task.recurrenceDays.length > 0 && task.isActive) {
+            return true;
+        }
+        // 2. Si tiene fecha específica, verificamos si cae en esta semana
+        if (task.publishDate) {
+            const date = parseISO(task.publishDate);
+            return isWithinInterval(date, { start, end });
+        }
+        return false;
+    });
+
+    const total = weeklyTasks.length;
+    const completed = weeklyTasks.filter(t => t.status === "Publicado").length;
+    
+    // Cálculo del Score (1 a 5)
+    // Si no hay tareas, asumimos 5 (o 0 si prefieres ser estricto, aquí puse 5 como "todo al día")
+    // Pero para ser justos, si total es 0, score es 0 (Sin actividad).
+    let score = 0;
+    if (total > 0) {
+        score = (completed / total) * 5;
+    }
+
+    // Mensaje según score
+    let message = "Sin actividad";
+    let color = "text-muted-foreground";
+    if (total > 0) {
+        if (score >= 4.5) { message = "¡Excelente Semana!"; color = "text-green-600"; }
+        else if (score >= 3.5) { message = "Buen trabajo"; color = "text-blue-600"; }
+        else if (score >= 2.5) { message = "Puedes mejorar"; color = "text-yellow-600"; }
+        else { message = "Atención requerida"; color = "text-red-600"; }
+    }
+
+    return {
+        total,
+        completed,
+        score: score.toFixed(1), // Un decimal
+        message,
+        color
+    };
+  }, [content]);
+
+
   const handleStatusChange = async (contentId: string, newStatus: Content['status']) => {
     try {
       const contentDocRef = doc(db, "contentSchedule", contentId);
@@ -130,16 +184,52 @@ const MyContent = () => {
       <div className="flex-1 space-y-6 md:space-y-8 p-4 md:p-8 pt-4 md:pt-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
-            Mi Dashboard de Contenido
+            Mis TareasC
           </h1>
         </div>
 
-        {/* --- CARDS DE ESTADÍSTICAS (ESTILO MONITOR INDIVIDUAL) --- */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+        {/* --- CARDS DE ESTADÍSTICAS --- */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+            
+            {/* === NUEVA CARD: RENDIMIENTO SEMANAL === */}
+            <Card className="bg-gradient-to-br from-background to-muted border-2 border-primary/20 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-3 opacity-10">
+                    <Trophy className="h-16 w-16 text-primary" />
+                </div>
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground uppercase flex items-center gap-2">
+                        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                        Calificación Semanal
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-end gap-2">
+                        <div className={cn("text-4xl font-bold", weeklyPerformance.color)}>
+                            {weeklyPerformance.score}
+                        </div>
+                        <div className="text-sm text-muted-foreground mb-1 font-medium">
+                            / 5.0
+                        </div>
+                    </div>
+                    <p className={cn("text-xs font-semibold mt-1", weeklyPerformance.color)}>
+                        {weeklyPerformance.message}
+                    </p>
+                    <div className="mt-2 h-2 w-full bg-muted rounded-full overflow-hidden">
+                        <div 
+                            className={cn("h-full transition-all duration-500", weeklyPerformance.score === "5.0" ? "bg-green-500" : "bg-primary")} 
+                            style={{ width: `${(parseFloat(weeklyPerformance.score) / 5) * 100}%` }}
+                        />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-2 text-right">
+                        {weeklyPerformance.completed} de {weeklyPerformance.total} tareas esta semana
+                    </p>
+                </CardContent>
+            </Card>
+
             {/* Card Pendientes */}
             <Card className="bg-background shadow-sm border-l-4 border-l-red-500 hover:shadow-md transition-shadow">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Tareas Pendientes</CardTitle>
+                    <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Pendientes</CardTitle>
                     <Clock className="h-5 w-5 text-red-500" />
                 </CardHeader>
                 <CardContent>

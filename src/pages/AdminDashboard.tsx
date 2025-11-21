@@ -50,19 +50,17 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-// Interfaz para el usuario del equipo
 interface TeamUser {
   id: string;
   email: string;
   role: "admin" | "user";
 }
 
-// Interfaz para el contenido (Actualizada)
 interface Content {
   id: string;
   type: string;
-  platform: string[]; // Ahora es un array de strings
-  recurrenceDays?: string[]; // Nuevo campo para los días
+  platform: string[]; 
+  recurrenceDays?: string[];
   publishDate: string;
   format: string;
   objective: string;
@@ -84,19 +82,13 @@ const AdminDashboard = () => {
   const [contentSchedule, setContentSchedule] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Popovers de multiselect
   const [openCreateMultiSelect, setOpenCreateMultiSelect] = useState(false);
   const [openEditMultiSelect, setOpenEditMultiSelect] = useState(false);
-  
-  // Popovers de Plataformas
   const [openCreatePlatform, setOpenCreatePlatform] = useState(false);
   const [openEditPlatform, setOpenEditPlatform] = useState(false);
 
-  // Estado para el modal de Edición
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentTask, setCurrentTask] = useState<Content | null>(null);
-
-  // Estado para el filtro de usuario individual
   const [selectedMemberId, setSelectedMemberId] = useState<string>("all");
 
   const [stats, setStats] = useState({
@@ -106,11 +98,10 @@ const AdminDashboard = () => {
     totalUsers: 0,
   });
 
-  // Estado del formulario de CREAR
   const initialFormState = {
     type: "",
-    platform: [] as string[], // Array
-    recurrenceDays: [] as string[], // Array para días
+    platform: [] as string[], 
+    recurrenceDays: [] as string[],
     publishDate: "",
     format: "",
     objective: "",
@@ -120,7 +111,6 @@ const AdminDashboard = () => {
   };
   const [formState, setFormState] = useState(initialFormState);
   
-  // Estado del formulario de EDITAR
   const [editFormState, setEditFormState] = useState<Omit<Content, "id" | "responsibleEmails" | "status" | "isActive" | "createdAt">>({
      type: "",
      platform: [],
@@ -133,8 +123,6 @@ const AdminDashboard = () => {
      responsibleIds: [],
   });
 
-
-  // Cargar equipo y contenido
   useEffect(() => {
     const fetchTeam = async () => {
       const usersQuery = query(collection(db, "users"));
@@ -155,7 +143,6 @@ const AdminDashboard = () => {
 
       snapshot.forEach((doc) => {
         const data = doc.data();
-        // Normalización de datos antiguos (si platform era string, convertirlo a array)
         const normalizedPlatform = Array.isArray(data.platform) ? data.platform : (data.platform ? [data.platform] : []);
         
         const taskItem = { 
@@ -183,7 +170,6 @@ const AdminDashboard = () => {
     return () => unsubscribe();
   }, []);
 
-  // --- Cálculos derivados para el monitor individual ---
   const memberStats = useMemo(() => {
     if (selectedMemberId === "all") return null;
 
@@ -200,13 +186,10 @@ const AdminDashboard = () => {
     };
   }, [selectedMemberId, contentSchedule]);
 
-
-  // --- HANDLERS FORMULARIO CREAR ---
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormState(prev => ({ ...prev, [e.target.id]: e.target.value }));
   };
   
-  // Selección Múltiple de Plataformas
   const handlePlatformSelect = (platform: string) => {
     setFormState(prev => {
         const current = prev.platform;
@@ -217,7 +200,6 @@ const AdminDashboard = () => {
     });
   };
 
-  // Selección Múltiple de Días (Versículos)
   const handleDaySelect = (day: string) => {
     setFormState(prev => {
         const current = prev.recurrenceDays;
@@ -241,7 +223,6 @@ const AdminDashboard = () => {
      setFormState(initialFormState);
   };
   
-  // --- HANDLERS FORMULARIO EDITAR ---
   const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setEditFormState(prev => ({ ...prev, [e.target.id]: e.target.value }));
   };
@@ -275,7 +256,6 @@ const AdminDashboard = () => {
     });
   };
 
-  // --- Lógica de Submit (CREAR) ---
   const handleSubmitContent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formState.type || formState.platform.length === 0 || !formState.contentIdea || formState.responsibleIds.length === 0) {
@@ -321,7 +301,6 @@ const AdminDashboard = () => {
     setIsEditModalOpen(true);
   };
 
-  // --- Lógica de Update (EDITAR) ---
   const handleUpdateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentTask) return;
@@ -388,41 +367,41 @@ const AdminDashboard = () => {
         </h1>
 
         {/* CARDS DE STATS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card className="border-l-4 border-destructive dark:border-destructive">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+          <Card className="bg-background shadow-sm border-l-4 border-l-red-500 hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Contenido Planeado</CardTitle>
-              <Clock className="h-5 w-5 text-destructive" />
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Contenido Planeado</CardTitle>
+              <Clock className="h-5 w-5 text-red-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{stats.planned}</div>
+              <div className="text-2xl font-bold text-red-600">{stats.planned}</div>
             </CardContent>
           </Card>
-          <Card className="border-l-4 border-yellow-500 dark:border-yellow-400">
+          <Card className="bg-background shadow-sm border-l-4 border-l-yellow-500 hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">En Progreso</CardTitle>
-              <BarChart className="h-5 w-5 text-yellow-500 dark:text-yellow-400" />
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase">En Progreso</CardTitle>
+              <BarChart className="h-5 w-5 text-yellow-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{stats.inProgress}</div>
+              <div className="text-2xl font-bold text-yellow-600">{stats.inProgress}</div>
             </CardContent>
           </Card>
-          <Card className="border-l-4 border-primary dark:border-primary">
+          <Card className="bg-background shadow-sm border-l-4 border-l-green-500 hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Publicados</CardTitle>
-              <CheckCircle className="h-5 w-5 text-primary" />
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Publicados</CardTitle>
+              <CheckCircle2 className="h-5 w-5 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{stats.published}</div>
+              <div className="text-2xl font-bold text-green-600">{stats.published}</div>
             </CardContent>
           </Card>
-          <Card className="border-l-4 border-muted-foreground dark:border-muted-foreground">
+          <Card className="bg-background shadow-sm border-l-4 border-l-blue-500 hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Miembros</CardTitle>
-              <Users className="h-5 w-5 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Miembros Activos</CardTitle>
+              <Users className="h-5 w-5 text-blue-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{stats.totalUsers}</div>
+              <div className="text-2xl font-bold text-blue-600">{stats.totalUsers}</div>
             </CardContent>
           </Card>
         </div>
@@ -474,14 +453,14 @@ const AdminDashboard = () => {
             
             {selectedMemberId !== "all" && memberStats && (
                 <CardContent className="space-y-6 animate-in slide-in-from-top-4 duration-500 fade-in-20">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
                         <Card className="bg-background shadow-sm border-l-4 border-l-blue-500 hover:shadow-md transition-shadow">
                              <CardHeader className="flex flex-row items-center justify-between pb-2">
                                 <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Asignadas</CardTitle>
                                 <ClipboardList className="h-5 w-5 text-blue-500" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold text-blue-600">{memberStats.total}</div>
+                                <div className="text-2xl font-bold text-blue-600">{memberStats.total}</div>
                             </CardContent>
                         </Card>
                         <Card className="bg-background shadow-sm border-l-4 border-l-red-500 hover:shadow-md transition-shadow">
@@ -490,7 +469,7 @@ const AdminDashboard = () => {
                                 <Clock className="h-5 w-5 text-red-500" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold text-red-600">{memberStats.planned}</div>
+                                <div className="text-2xl font-bold text-red-600">{memberStats.planned}</div>
                             </CardContent>
                         </Card>
                         <Card className="bg-background shadow-sm border-l-4 border-l-yellow-500 hover:shadow-md transition-shadow">
@@ -499,7 +478,7 @@ const AdminDashboard = () => {
                                 <PlayCircle className="h-5 w-5 text-yellow-500" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold text-yellow-600">{memberStats.inProgress}</div>
+                                <div className="text-2xl font-bold text-yellow-600">{memberStats.inProgress}</div>
                             </CardContent>
                         </Card>
                         <Card className="bg-background shadow-sm border-l-4 border-l-green-500 hover:shadow-md transition-shadow">
@@ -508,53 +487,96 @@ const AdminDashboard = () => {
                                 <CheckCircle2 className="h-5 w-5 text-green-500" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold text-green-600">{memberStats.published}</div>
+                                <div className="text-2xl font-bold text-green-600">{memberStats.published}</div>
                             </CardContent>
                         </Card>
                     </div>
 
-                    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-                        <div className="p-3 border-b bg-muted/30 flex items-center gap-2">
-                            <Filter className="h-4 w-4 text-muted-foreground" />
-                            <h3 className="font-semibold text-sm">
-                                Tareas de {team.find(t => t.id === selectedMemberId)?.email}
-                            </h3>
-                        </div>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Tipo</TableHead>
-                                    <TableHead>Idea / Descripción</TableHead>
-                                    <TableHead>Fecha</TableHead>
-                                    <TableHead className="text-right">Estado Actual</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {memberStats.tasks.length === 0 ? (
+                    {/* AQUÍ ESTÁ LA MAGIA: Tabla en Desktop / Cards en Mobile */}
+                    <div className="space-y-4">
+                        
+                        {/* 1. VISTA DE TABLA (Solo Desktop) */}
+                        <div className="rounded-xl border bg-card shadow-sm overflow-hidden hidden md:block">
+                            <div className="p-3 border-b bg-muted/30 flex items-center gap-2">
+                                <Filter className="h-4 w-4 text-muted-foreground" />
+                                <h3 className="font-semibold text-sm">
+                                    Tareas de {team.find(t => t.id === selectedMemberId)?.email}
+                                </h3>
+                            </div>
+                            <Table>
+                                <TableHeader>
                                     <TableRow>
-                                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                                            <div className="flex flex-col items-center gap-2">
-                                                <CheckCircle className="h-8 w-8 text-muted-foreground/30" />
-                                                <span>Todo limpio. No hay tareas activas asignadas.</span>
-                                            </div>
-                                        </TableCell>
+                                        <TableHead>Tipo</TableHead>
+                                        <TableHead>Idea / Descripción</TableHead>
+                                        <TableHead>Fecha</TableHead>
+                                        <TableHead className="text-right">Estado Actual</TableHead>
                                     </TableRow>
-                                ) : (
-                                    memberStats.tasks.map(task => (
-                                        <TableRow key={task.id} className="hover:bg-muted/50">
-                                            <TableCell className="font-medium">{task.type}</TableCell>
-                                            <TableCell className="text-muted-foreground max-w-[200px] md:max-w-[300px] truncate" title={task.contentIdea}>
-                                                {task.contentIdea}
-                                            </TableCell>
-                                            <TableCell>{task.publishDate || <span className="text-muted-foreground text-xs italic">Sin fecha</span>}</TableCell>
-                                            <TableCell className="text-right">
-                                                 <Badge variant={getStatusVariant(task.status)} className="shadow-none">{task.status}</Badge>
+                                </TableHeader>
+                                <TableBody>
+                                    {memberStats.tasks.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <CheckCircle className="h-8 w-8 text-muted-foreground/30" />
+                                                    <span>Todo limpio. No hay tareas activas asignadas.</span>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
+                                    ) : (
+                                        memberStats.tasks.map(task => (
+                                            <TableRow key={task.id} className="hover:bg-muted/50">
+                                                <TableCell className="font-medium">{task.type}</TableCell>
+                                                <TableCell className="text-muted-foreground max-w-[200px] md:max-w-[300px] truncate" title={task.contentIdea}>
+                                                    {task.contentIdea}
+                                                </TableCell>
+                                                <TableCell>{task.publishDate || <span className="text-muted-foreground text-xs italic">Sin fecha</span>}</TableCell>
+                                                <TableCell className="text-right">
+                                                     <Badge variant={getStatusVariant(task.status)} className="shadow-none">{task.status}</Badge>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+
+                        {/* 2. VISTA DE CARDS (Solo Móvil) - Estilo idéntico al Global History Mobile */}
+                        <div className="space-y-4 md:hidden">
+                            <div className="flex items-center gap-2 px-1 mb-2">
+                                <Filter className="h-4 w-4 text-muted-foreground" />
+                                <h3 className="font-semibold text-sm">
+                                    Tareas de {team.find(t => t.id === selectedMemberId)?.email}
+                                </h3>
+                            </div>
+                            
+                            {memberStats.tasks.length === 0 ? (
+                                <div className="text-center text-muted-foreground py-8 border rounded-lg bg-muted/10">
+                                    <CheckCircle className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
+                                    <span>Todo limpio. Sin tareas.</span>
+                                </div>
+                            ) : (
+                                memberStats.tasks.map(task => (
+                                    <Card key={task.id} className="w-full border-l-4 border-l-primary shadow-sm">
+                                        <CardHeader className="pb-2">
+                                            <div className="flex justify-between items-start">
+                                                <CardTitle className="text-lg">{task.type}</CardTitle>
+                                                <Badge variant={getStatusVariant(task.status)}>{task.status}</Badge>
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent className="space-y-3 pt-2">
+                                            <div className="text-sm text-muted-foreground line-clamp-3">
+                                                {task.contentIdea}
+                                            </div>
+                                            <div className="flex justify-between text-sm border-t pt-2 mt-2">
+                                                <span className="font-medium text-muted-foreground">Fecha:</span>
+                                                <span>{task.publishDate || "Sin fecha"}</span>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))
+                            )}
+                        </div>
+
                     </div>
                 </CardContent>
             )}
@@ -605,7 +627,7 @@ const AdminDashboard = () => {
                     </Popover>
                   </div>
 
-                  {/* SELECCIÓN DE DÍAS (PARA VERSÍCULOS/TAREAS SEMANALES) */}
+                  {/* SELECCIÓN DE DÍAS */}
                   <div className="md:col-span-2 space-y-3 border p-4 rounded-lg bg-muted/10">
                     <div className="flex items-center gap-2">
                         <CalendarDays className="h-4 w-4 text-muted-foreground" />
@@ -724,13 +746,11 @@ const AdminDashboard = () => {
                             {item.responsibleEmails?.join(", ") || "N/A"}
                           </TableCell>
                           <TableCell>
-                            {/* Mostrar plataformas unidas por coma */}
                             {item.platform && item.platform.length > 0 ? item.platform.join(", ") : "N/A"}
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col">
                                 <span>{item.publishDate || "N/A"}</span>
-                                {/* Mostrar días si existen */}
                                 {item.recurrenceDays && item.recurrenceDays.length > 0 && (
                                     <span className="text-xs text-muted-foreground">
                                         {item.recurrenceDays.length === 7 ? "Todos los días" : item.recurrenceDays.map(d => d.substring(0,3)).join(", ")}
@@ -765,6 +785,7 @@ const AdminDashboard = () => {
                 </Table>
               </div>
               
+              {/* Mobile List Cards - DISEÑO IDÉNTICO A USER */}
               <div className="space-y-4 md:hidden">
                 {loading ? (
                   <p className="text-center">Cargando...</p>
@@ -772,8 +793,11 @@ const AdminDashboard = () => {
                   <p className="text-center">No hay contenido.</p>
                 ) : (
                   contentSchedule.map(item => (
-                    <Card key={item.id} className={cn("w-full", !item.isActive && "opacity-60")}>
-                      <CardHeader>
+                    <Card 
+                        key={item.id} 
+                        className={cn("w-full border-l-4 shadow-sm", !item.isActive ? "opacity-60 border-l-muted" : "border-l-primary")}
+                    >
+                      <CardHeader className="pb-2">
                         <div className="flex justify-between items-start">
                           <div>
                             <CardTitle className="text-lg">{item.type}</CardTitle>
@@ -786,7 +810,7 @@ const AdminDashboard = () => {
                           </Button>
                         </div>
                       </CardHeader>
-                      <CardContent className="space-y-3">
+                      <CardContent className="space-y-3 pt-2">
                         <div className="flex justify-between">
                           <span className="text-sm font-medium text-muted-foreground">Plataforma:</span>
                           <span className="font-semibold">{item.platform?.join(", ")}</span>

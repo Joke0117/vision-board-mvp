@@ -18,14 +18,15 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
-import { addDays, isAfter, parseISO, startOfDay } from "date-fns";
+import { addDays, isAfter, parseISO } from "date-fns";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-// Interfaz para el contenido
+// Interfaz actualizada para el contenido
 interface Content {
   id: string;
   type: string;
-  platform: string;
+  platform: string[]; // Ahora es un array
+  recurrenceDays?: string[]; // Nuevo campo
   publishDate: string;
   contentIdea: string;
   responsibleIds: string[];
@@ -62,12 +63,22 @@ const MyContent = () => {
       let pending = 0, inProgress = 0, completed = 0;
 
       snapshot.forEach((doc) => {
-        const data = doc.data() as Omit<Content, "id">;
-        contentData.push({ id: doc.id, ...data });
+        const data = doc.data();
+        // Normalizamos la plataforma a array para que no falle
+        const normalizedPlatform = Array.isArray(data.platform) ? data.platform : (data.platform ? [data.platform] : []);
 
-        if (data.status === "Planeado" || data.status === "Revisión") pending++;
-        if (data.status === "En Progreso") inProgress++;
-        if (data.status === "Publicado") completed++;
+        const taskItem = { 
+            id: doc.id, 
+            ...data,
+            platform: normalizedPlatform,
+            recurrenceDays: data.recurrenceDays || []
+        } as Content;
+        
+        contentData.push(taskItem);
+
+        if (taskItem.status === "Planeado" || taskItem.status === "Revisión") pending++;
+        if (taskItem.status === "En Progreso") inProgress++;
+        if (taskItem.status === "Publicado") completed++;
       });
       
       setContent(contentData);
@@ -96,14 +107,11 @@ const MyContent = () => {
     }
   };
 
-  // --- Lógica de Bloqueo (24h después de la fecha de publicación) ---
   const isTaskLocked = (publishDateString: string) => {
     if (!publishDateString) return false;
     const today = new Date();
     const publishDate = parseISO(publishDateString);
-    // Sumamos 1 día (24 horas) a la fecha de publicación
     const deadline = addDays(publishDate, 1); 
-    // Si hoy es DESPUÉS de la fecha límite, bloqueamos
     return isAfter(today, deadline);
   };
 
@@ -126,45 +134,38 @@ const MyContent = () => {
           </h1>
         </div>
 
-        {/* --- CARDS DE ESTADÍSTICAS (ESTILO NUEVO) --- */}
+        {/* --- CARDS DE ESTADÍSTICAS (ESTILO MONITOR INDIVIDUAL) --- */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-            
             {/* Card Pendientes */}
             <Card className="bg-background shadow-sm border-l-4 border-l-red-500 hover:shadow-md transition-shadow">
-                <CardContent className="p-4 flex items-center justify-between">
-                    <div>
-                        <p className="text-xs font-medium text-muted-foreground uppercase">Tareas Pendientes</p>
-                        <div className="text-2xl font-bold text-red-600 mt-1">{stats.pendingTasks}</div>
-                    </div>
-                    <div className="p-3 bg-red-50 rounded-full">
-                        <Clock className="h-6 w-6 text-red-500" />
-                    </div>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Tareas Pendientes</CardTitle>
+                    <Clock className="h-5 w-5 text-red-500" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold text-red-600">{stats.pendingTasks}</div>
                 </CardContent>
             </Card>
 
             {/* Card En Progreso */}
             <Card className="bg-background shadow-sm border-l-4 border-l-yellow-500 hover:shadow-md transition-shadow">
-                <CardContent className="p-4 flex items-center justify-between">
-                    <div>
-                        <p className="text-xs font-medium text-muted-foreground uppercase">En Progreso</p>
-                        <div className="text-2xl font-bold text-yellow-600 mt-1">{stats.inProgressTasks}</div>
-                    </div>
-                    <div className="p-3 bg-yellow-50 rounded-full">
-                        <PlayCircle className="h-6 w-6 text-yellow-500" />
-                    </div>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground uppercase">En Progreso</CardTitle>
+                    <PlayCircle className="h-5 w-5 text-yellow-500" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold text-yellow-600">{stats.inProgressTasks}</div>
                 </CardContent>
             </Card>
 
             {/* Card Completadas */}
             <Card className="bg-background shadow-sm border-l-4 border-l-green-500 hover:shadow-md transition-shadow">
-                <CardContent className="p-4 flex items-center justify-between">
-                    <div>
-                        <p className="text-xs font-medium text-muted-foreground uppercase">Completadas</p>
-                        <div className="text-2xl font-bold text-green-600 mt-1">{stats.completedTasks}</div>
-                    </div>
-                    <div className="p-3 bg-green-50 rounded-full">
-                        <CheckCircle2 className="h-6 w-6 text-green-500" />
-                    </div>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Completadas</CardTitle>
+                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold text-green-600">{stats.completedTasks}</div>
                 </CardContent>
             </Card>
         </div>
@@ -178,17 +179,14 @@ const MyContent = () => {
           </CardHeader>
           <CardContent>
             
-            {/* ==================================
-              VISTA DE TABLA (DESKTOP)
-              ==================================
-            */}
+            {/* VISTA DE TABLA (DESKTOP) */}
             <div className="border rounded-lg overflow-x-auto hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="min-w-[200px]">Contenido</TableHead>
                     <TableHead className="min-w-[120px]">Plataforma</TableHead>
-                    <TableHead className="min-w-[120px]">Fecha de Pub.</TableHead>
+                    <TableHead className="min-w-[120px]">Fecha / Días</TableHead>
                     <TableHead className="min-w-[120px]">Estado Actual</TableHead>
                     <TableHead className="min-w-[180px]">Actualizar Estado</TableHead>
                   </TableRow>
@@ -218,21 +216,30 @@ const MyContent = () => {
                               </span>
                             </div>
                           </TableCell>
-                          <TableCell>{item.platform}</TableCell>
                           <TableCell>
-                             <div className="flex items-center gap-2">
-                                {item.publishDate || "N/A"}
-                                {locked && (
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger>
-                                                <AlertCircle className="h-4 w-4 text-destructive" />
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                                <p>Tarea vencida hace más de 24h</p>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
+                             {item.platform && item.platform.length > 0 ? item.platform.join(", ") : "N/A"}
+                          </TableCell>
+                          <TableCell>
+                             <div className="flex flex-col">
+                                <div className="flex items-center gap-2">
+                                    {item.publishDate || "N/A"}
+                                    {locked && (
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger>
+                                                    <AlertCircle className="h-4 w-4 text-destructive" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Tarea vencida hace más de 24h</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    )}
+                                </div>
+                                {item.recurrenceDays && item.recurrenceDays.length > 0 && (
+                                    <span className="text-xs text-muted-foreground">
+                                        {item.recurrenceDays.length === 7 ? "Todos los días" : item.recurrenceDays.map(d => d.substring(0,3)).join(", ")}
+                                    </span>
                                 )}
                              </div>
                           </TableCell>
@@ -270,10 +277,7 @@ const MyContent = () => {
               </Table>
             </div>
 
-            {/* ==================================
-              VISTA DE CARDS (MÓVIL)
-              ==================================
-            */}
+            {/* VISTA DE CARDS (MÓVIL) */}
             <div className="space-y-4 md:hidden">
               {loading ? (
                 <p className="text-center py-4">Cargando tu contenido...</p>
@@ -297,13 +301,20 @@ const MyContent = () => {
                         <CardContent className="space-y-3 pt-2">
                         <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Plataforma:</span>
-                            <span className="font-medium">{item.platform}</span>
+                            <span className="font-medium">{item.platform?.join(", ")}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Fecha:</span>
-                            <span className={cn("font-medium", locked && "text-destructive")}>
-                                {item.publishDate || "N/A"}
-                            </span>
+                            <div className="text-right">
+                                <span className={cn("font-medium", locked && "text-destructive")}>
+                                    {item.publishDate || "N/A"}
+                                </span>
+                                {item.recurrenceDays && item.recurrenceDays.length > 0 && (
+                                    <span className="text-xs text-muted-foreground block">
+                                        {item.recurrenceDays.join(", ")}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                         
                         <div className="pt-2 border-t mt-2">

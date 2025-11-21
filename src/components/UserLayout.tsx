@@ -4,7 +4,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge"; // <--- ¡AQUÍ ESTABA EL ERROR! (Faltaba esta línea)
+import { Badge } from "@/components/ui/badge"; 
 import {
   SidebarProvider,
   Sidebar,
@@ -29,7 +29,8 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle2,
-  CheckCheck
+  CheckCheck,
+  LayoutDashboard // <--- Nuevo icono importado
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -63,7 +64,7 @@ interface NotificationTask {
   publishDate: string;
   status: string;
   contentIdea: string;
-  readBy?: string[]; // Nuevo campo para controlar quién ya leyó la notificación
+  readBy?: string[];
 }
 
 export const UserLayout = ({ children }: { children: React.ReactNode }) => {
@@ -78,7 +79,7 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
     pending: NotificationTask[];
     totalCount: number;
     unreadCount: number;
-    allIds: string[]; // Para marcar todas como leídas
+    allIds: string[];
   }>({ expiring: [], pending: [], totalCount: 0, unreadCount: 0, allIds: [] });
 
   // Escuchar tareas para notificaciones
@@ -103,10 +104,8 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
         const data = docSnapshot.data() as NotificationTask;
         const task = { ...data, id: docSnapshot.id };
 
-        // Si ya está publicado, no lo mostramos en notificaciones pendientes
         if (task.status === "Publicado") return;
 
-        // Verificar si el usuario ya leyó esta notificación
         const isRead = task.readBy?.includes(user.uid) || false;
         if (!isRead) {
             unread++;
@@ -117,7 +116,6 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
         if (task.publishDate) {
           const dateObj = parseISO(task.publishDate);
           const daysDiff = differenceInDays(dateObj, today);
-          // Consideramos "Por vencer" si es hoy, ya pasó, o es en los próximos 3 días
           if (daysDiff <= 3) {
             isExpiringSoon = true;
           }
@@ -143,13 +141,10 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
   }, [user]);
 
   // --- FUNCIONES DE MARCAR COMO LEÍDO ---
-
-  // 1. Marcar una sola tarea como leída (al hacer clic)
   const handleMarkAsRead = async (taskId: string) => {
     if (!user) return;
     try {
         const taskRef = doc(db, "contentSchedule", taskId);
-        // Usamos arrayUnion para añadir el ID sin borrar los de otros usuarios
         await updateDoc(taskRef, {
             readBy: arrayUnion(user.uid)
         });
@@ -158,7 +153,6 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // 2. Marcar TODAS como leídas (botón del header)
   const handleMarkAllAsRead = async () => {
     if (!user || notifications.allIds.length === 0) return;
     
@@ -184,6 +178,7 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
     return email ? email.substring(0, 2).toUpperCase() : "U";
   };
 
+  // Definición del menú con lógica condicional para Admin
   const menuItems = [
     { name: "Mi Contenido", path: "/mi-contenido", icon: CalendarCheck },
     { name: "Equipo", path: "/", icon: Home },
@@ -191,12 +186,14 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
     { name: "Logros y Metas", path: "/logros-metas", icon: BarChart2 },
     { name: "Galería", path: "/galeria", icon: Image },
     { name: "Misión y Visión", path: "/mision-vision", icon: Target },
+    // Solo mostramos este ítem si el usuario es admin
+    ...(user?.role === 'admin' ? [
+      { name: "Panel Admin", path: "/admin-dashboard", icon: LayoutDashboard }
+    ] : [])
   ];
 
-  // Componente del contenido de notificaciones para reutilizar
   const NotificationsContent = () => (
     <div className="w-80 max-w-[90vw] flex flex-col h-[400px]">
-      {/* Header del Popover */}
       <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40 shrink-0">
         <div className="flex items-center gap-2">
             <h4 className="font-semibold text-sm">Notificaciones</h4>
@@ -207,7 +204,6 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
             )}
         </div>
         
-        {/* Botón Marcar todas como leídas */}
         {notifications.unreadCount > 0 && (
             <Button 
                 variant="ghost" 
@@ -221,7 +217,6 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
         )}
       </div>
 
-      {/* Lista Scrollable */}
       <ScrollArea className="flex-1">
         {notifications.totalCount === 0 ? (
           <div className="p-8 text-center text-muted-foreground text-sm flex flex-col items-center justify-center h-full mt-10">
@@ -231,8 +226,7 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
           </div>
         ) : (
           <div className="p-2 space-y-4">
-            
-            {/* Sección: Por Vencer (Prioridad) */}
+            {/* Sección: Por Vencer */}
             {notifications.expiring.length > 0 && (
               <div>
                 <p className="text-[10px] font-bold text-destructive uppercase tracking-wider px-2 mb-2 flex items-center gap-1">
@@ -338,7 +332,6 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
           <HamburgerMenu isOpen={open} onClick={() => setOpen(!open)} />
 
           <div className="flex items-center gap-3">
-            {/* Notificaciones Móvil */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative">
@@ -395,11 +388,8 @@ export const UserLayout = ({ children }: { children: React.ReactNode }) => {
         </SidebarContent>
 
         <SidebarFooter className="p-2 border-t border-border/70">
-          {/* Contenedor de herramientas (Tema + Notificaciones) */}
           <div className="flex items-center justify-between px-2 mb-2 gap-1">
             <ThemeToggle />
-            
-            {/* Notificaciones Desktop */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative h-9 w-9">

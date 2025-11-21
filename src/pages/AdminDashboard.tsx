@@ -45,9 +45,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { 
   PlusCircle, Users, BarChart, Clock, CheckCircle, 
   ChevronsUpDown, Check, Pencil, UserCheck, Filter, 
-  X, ClipboardList, PlayCircle, CheckCircle2
+  X, ClipboardList, PlayCircle, CheckCircle2, CalendarDays
 } from "lucide-react"; 
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 // Interfaz para el usuario del equipo
 interface TeamUser {
@@ -56,11 +57,12 @@ interface TeamUser {
   role: "admin" | "user";
 }
 
-// Interfaz para el contenido
+// Interfaz para el contenido (Actualizada)
 interface Content {
   id: string;
   type: string;
-  platform: string;
+  platform: string[]; // Ahora es un array de strings
+  recurrenceDays?: string[]; // Nuevo campo para los días
   publishDate: string;
   format: string;
   objective: string;
@@ -73,6 +75,9 @@ interface Content {
   createdAt: Timestamp;
 }
 
+const PLATFORMS_LIST = ["Facebook", "Instagram", "Whatsapp"];
+const DAYS_LIST = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+
 const AdminDashboard = () => {
   const { user } = useAuth();
   const [team, setTeam] = useState<TeamUser[]>([]);
@@ -83,6 +88,10 @@ const AdminDashboard = () => {
   const [openCreateMultiSelect, setOpenCreateMultiSelect] = useState(false);
   const [openEditMultiSelect, setOpenEditMultiSelect] = useState(false);
   
+  // Popovers de Plataformas
+  const [openCreatePlatform, setOpenCreatePlatform] = useState(false);
+  const [openEditPlatform, setOpenEditPlatform] = useState(false);
+
   // Estado para el modal de Edición
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentTask, setCurrentTask] = useState<Content | null>(null);
@@ -100,7 +109,8 @@ const AdminDashboard = () => {
   // Estado del formulario de CREAR
   const initialFormState = {
     type: "",
-    platform: "",
+    platform: [] as string[], // Array
+    recurrenceDays: [] as string[], // Array para días
     publishDate: "",
     format: "",
     objective: "",
@@ -113,13 +123,14 @@ const AdminDashboard = () => {
   // Estado del formulario de EDITAR
   const [editFormState, setEditFormState] = useState<Omit<Content, "id" | "responsibleEmails" | "status" | "isActive" | "createdAt">>({
      type: "",
-     platform: "",
+     platform: [],
+     recurrenceDays: [],
      publishDate: "",
      format: "",
      objective: "",
      audience: "",
      contentIdea: "",
-     responsibleIds: [] as string[],
+     responsibleIds: [],
   });
 
 
@@ -143,13 +154,24 @@ const AdminDashboard = () => {
       let planned = 0, inProgress = 0, published = 0;
 
       snapshot.forEach((doc) => {
-        const data = doc.data() as Omit<Content, "id" | "createdAt"> & { createdAt: Timestamp };
-        contentData.push({ id: doc.id, ...data });
+        const data = doc.data();
+        // Normalización de datos antiguos (si platform era string, convertirlo a array)
+        const normalizedPlatform = Array.isArray(data.platform) ? data.platform : (data.platform ? [data.platform] : []);
         
-        if (data.isActive) {
-          if (data.status === "Planeado") planned++;
-          if (data.status === "En Progreso") inProgress++;
-          if (data.status === "Publicado") published++;
+        const taskItem = { 
+            id: doc.id, 
+            ...data, 
+            platform: normalizedPlatform,
+            recurrenceDays: data.recurrenceDays || [],
+            createdAt: data.createdAt 
+        } as Content;
+
+        contentData.push(taskItem);
+        
+        if (taskItem.isActive) {
+          if (taskItem.status === "Planeado") planned++;
+          if (taskItem.status === "En Progreso") inProgress++;
+          if (taskItem.status === "Publicado") published++;
         }
       });
       
@@ -165,7 +187,6 @@ const AdminDashboard = () => {
   const memberStats = useMemo(() => {
     if (selectedMemberId === "all") return null;
 
-    // Filtramos asegurando que responsibleIds exista para evitar errores
     const memberTasks = contentSchedule.filter(t => 
       (t.responsibleIds || []).includes(selectedMemberId) && t.isActive
     );
@@ -180,13 +201,33 @@ const AdminDashboard = () => {
   }, [selectedMemberId, contentSchedule]);
 
 
-  // --- Funciones para el formulario de CREAR ---
+  // --- HANDLERS FORMULARIO CREAR ---
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormState(prev => ({ ...prev, [e.target.id]: e.target.value }));
   };
-  const handleSelectChange = (id: string, value: string) => {
-     setFormState(prev => ({ ...prev, [id]: value }));
+  
+  // Selección Múltiple de Plataformas
+  const handlePlatformSelect = (platform: string) => {
+    setFormState(prev => {
+        const current = prev.platform;
+        const updated = current.includes(platform)
+            ? current.filter(p => p !== platform)
+            : [...current, platform];
+        return { ...prev, platform: updated };
+    });
   };
+
+  // Selección Múltiple de Días (Versículos)
+  const handleDaySelect = (day: string) => {
+    setFormState(prev => {
+        const current = prev.recurrenceDays;
+        const updated = current.includes(day)
+            ? current.filter(d => d !== day)
+            : [...current, day];
+        return { ...prev, recurrenceDays: updated };
+    });
+  };
+
   const handleMultiSelectChange = (userId: string) => {
     setFormState(prev => {
       const newIds = prev.responsibleIds.includes(userId)
@@ -195,17 +236,36 @@ const AdminDashboard = () => {
       return { ...prev, responsibleIds: newIds };
     });
   };
+  
   const resetForm = () => {
      setFormState(initialFormState);
   };
   
-  // --- Funciones para el formulario de EDITAR ---
+  // --- HANDLERS FORMULARIO EDITAR ---
   const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setEditFormState(prev => ({ ...prev, [e.target.id]: e.target.value }));
   };
-  const handleEditSelectChange = (id: string, value: string) => {
-     setEditFormState(prev => ({ ...prev, [id]: value }));
+
+  const handleEditPlatformSelect = (platform: string) => {
+    setEditFormState(prev => {
+        const current = prev.platform || [];
+        const updated = current.includes(platform)
+            ? current.filter(p => p !== platform)
+            : [...current, platform];
+        return { ...prev, platform: updated };
+    });
   };
+
+  const handleEditDaySelect = (day: string) => {
+    setEditFormState(prev => {
+        const current = prev.recurrenceDays || [];
+        const updated = current.includes(day)
+            ? current.filter(d => d !== day)
+            : [...current, day];
+        return { ...prev, recurrenceDays: updated };
+    });
+  };
+
   const handleEditMultiSelectChange = (userId: string) => {
     setEditFormState(prev => {
       const newIds = prev.responsibleIds.includes(userId)
@@ -215,11 +275,11 @@ const AdminDashboard = () => {
     });
   };
 
-  // --- Lógica de Submit ---
+  // --- Lógica de Submit (CREAR) ---
   const handleSubmitContent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formState.type || !formState.platform || !formState.contentIdea || formState.responsibleIds.length === 0) {
-      alert("Por favor, completa los campos requeridos (incluyendo al menos 1 responsable).");
+    if (!formState.type || formState.platform.length === 0 || !formState.contentIdea || formState.responsibleIds.length === 0) {
+      alert("Por favor, completa los campos requeridos (Tipo, Plataforma, Idea, Responsables).");
       return;
     }
 
@@ -237,9 +297,11 @@ const AdminDashboard = () => {
         createdBy: user?.uid,
       });
 
+      toast.success("Has creado una nueva tarea");
       resetForm();
     } catch (error) {
       console.error("Error al crear contenido: ", error);
+      toast.error("Error al crear la tarea");
     }
   };
 
@@ -247,7 +309,8 @@ const AdminDashboard = () => {
     setCurrentTask(task);
     setEditFormState({
       type: task.type,
-      platform: task.platform,
+      platform: task.platform || [],
+      recurrenceDays: task.recurrenceDays || [],
       publishDate: task.publishDate || "",
       format: task.format || "",
       objective: task.objective || "",
@@ -258,6 +321,7 @@ const AdminDashboard = () => {
     setIsEditModalOpen(true);
   };
 
+  // --- Lógica de Update (EDITAR) ---
   const handleUpdateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentTask) return;
@@ -276,21 +340,33 @@ const AdminDashboard = () => {
 
       await updateDoc(contentDocRef, updateData);
 
+      toast.success("Has actualizado la tarea");
       setIsEditModalOpen(false);
       setCurrentTask(null);
     } catch (error) {
       console.error("Error al actualizar la tarea: ", error);
+      toast.error("Error al actualizar la tarea");
     }
   };
   
   const handleToggleActive = async (contentId: string, currentIsActive: boolean) => {
     try {
       const contentDocRef = doc(db, "contentSchedule", contentId);
+      const newState = !currentIsActive;
+      
       await updateDoc(contentDocRef, {
-        isActive: !currentIsActive
+        isActive: newState
       });
+
+      if (newState) {
+        toast.success("Has activado una tarea");
+      } else {
+        toast.success("Has desactivado una tarea");
+      }
+
     } catch (error) {
       console.error("Error al actualizar estado: ", error);
+      toast.error("Error al cambiar el estado");
     }
   };
 
@@ -311,7 +387,7 @@ const AdminDashboard = () => {
           Dashboard de Contenido
         </h1>
 
-        {/* CARDS DE STATS GENERALES */}
+        {/* CARDS DE STATS */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="border-l-4 border-destructive dark:border-destructive">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -351,7 +427,7 @@ const AdminDashboard = () => {
           </Card>
         </div>
 
-        {/* === MONITOR DE DESEMPEÑO INDIVIDUAL MEJORADO === */}
+        {/* === MONITOR DE DESEMPEÑO INDIVIDUAL === */}
         <Card className="bg-muted/30 border-dashed border-2 relative overflow-hidden">
             <CardHeader className="pb-4">
                 <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between z-10 relative">
@@ -365,7 +441,6 @@ const AdminDashboard = () => {
                         </div>
                     </div>
                     
-                    {/* Controles: Select + Botón Cerrar */}
                     <div className="flex items-center gap-2 w-full md:w-auto">
                         <div className="w-full md:w-[280px]">
                             <Select value={selectedMemberId} onValueChange={setSelectedMemberId}>
@@ -382,7 +457,6 @@ const AdminDashboard = () => {
                                 </SelectContent>
                             </Select>
                         </div>
-                        {/* Botón X para cerrar */}
                         {selectedMemberId !== "all" && (
                             <Button 
                                 variant="outline" 
@@ -398,66 +472,47 @@ const AdminDashboard = () => {
                 </div>
             </CardHeader>
             
-            {/* Despliegue animado de contenido */}
             {selectedMemberId !== "all" && memberStats && (
                 <CardContent className="space-y-6 animate-in slide-in-from-top-4 duration-500 fade-in-20">
-                    
-                    {/* Grid de Tarjetas Bonitas */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {/* Card Total */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                         <Card className="bg-background shadow-sm border-l-4 border-l-blue-500 hover:shadow-md transition-shadow">
-                            <CardContent className="p-4 flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs font-medium text-muted-foreground uppercase">Asignadas</p>
-                                    <div className="text-2xl font-bold text-blue-600 mt-1">{memberStats.total}</div>
-                                </div>
-                                <div className="p-2 bg-blue-50 rounded-full">
-                                    <ClipboardList className="h-5 w-5 text-blue-500" />
-                                </div>
+                             <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Asignadas</CardTitle>
+                                <ClipboardList className="h-5 w-5 text-blue-500" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold text-blue-600">{memberStats.total}</div>
                             </CardContent>
                         </Card>
-
-                        {/* Card Pendientes */}
                         <Card className="bg-background shadow-sm border-l-4 border-l-red-500 hover:shadow-md transition-shadow">
-                            <CardContent className="p-4 flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs font-medium text-muted-foreground uppercase">Pendientes</p>
-                                    <div className="text-2xl font-bold text-red-600 mt-1">{memberStats.planned}</div>
-                                </div>
-                                <div className="p-2 bg-red-50 rounded-full">
-                                    <Clock className="h-5 w-5 text-red-500" />
-                                </div>
+                            <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Pendientes</CardTitle>
+                                <Clock className="h-5 w-5 text-red-500" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold text-red-600">{memberStats.planned}</div>
                             </CardContent>
                         </Card>
-
-                        {/* Card En Progreso */}
                         <Card className="bg-background shadow-sm border-l-4 border-l-yellow-500 hover:shadow-md transition-shadow">
-                            <CardContent className="p-4 flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs font-medium text-muted-foreground uppercase">En Curso</p>
-                                    <div className="text-2xl font-bold text-yellow-600 mt-1">{memberStats.inProgress}</div>
-                                </div>
-                                <div className="p-2 bg-yellow-50 rounded-full">
-                                    <PlayCircle className="h-5 w-5 text-yellow-500" />
-                                </div>
+                             <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                <CardTitle className="text-sm font-medium text-muted-foreground uppercase">En Curso</CardTitle>
+                                <PlayCircle className="h-5 w-5 text-yellow-500" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold text-yellow-600">{memberStats.inProgress}</div>
                             </CardContent>
                         </Card>
-
-                        {/* Card Completadas */}
                         <Card className="bg-background shadow-sm border-l-4 border-l-green-500 hover:shadow-md transition-shadow">
-                            <CardContent className="p-4 flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs font-medium text-muted-foreground uppercase">Listas</p>
-                                    <div className="text-2xl font-bold text-green-600 mt-1">{memberStats.published}</div>
-                                </div>
-                                <div className="p-2 bg-green-50 rounded-full">
-                                    <CheckCircle2 className="h-5 w-5 text-green-500" />
-                                </div>
+                             <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Listas</CardTitle>
+                                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold text-green-600">{memberStats.published}</div>
                             </CardContent>
                         </Card>
                     </div>
 
-                    {/* Tabla Mejorada con Título Personalizado */}
                     <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
                         <div className="p-3 border-b bg-muted/30 flex items-center gap-2">
                             <Filter className="h-4 w-4 text-muted-foreground" />
@@ -504,7 +559,6 @@ const AdminDashboard = () => {
                 </CardContent>
             )}
         </Card>
-        {/* === FIN SECCIÓN MONITOR === */}
 
         {/* Formulario desplegable y Tabla General */}
         <div className="space-y-8">
@@ -521,23 +575,65 @@ const AdminDashboard = () => {
                 <form onSubmit={handleSubmitContent} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-4">
                   <div className="space-y-2">
                     <Label htmlFor="type">Tipo de Publicidad</Label>
-                    <Input id="type" value={formState.type} onChange={handleFormChange} placeholder="Ej. Prédica dominical, Anuncio" required />
+                    <Input id="type" value={formState.type} onChange={handleFormChange} placeholder="Ej. Prédica, Versículos, Anuncio" required />
                   </div>
+                  
+                  {/* SELECCIÓN MÚLTIPLE DE PLATAFORMA */}
                   <div className="space-y-2">
-                    <Label htmlFor="platform">Plataforma</Label>
-                    <Select value={formState.platform} onValueChange={(v) => handleSelectChange("platform", v)} required>
-                      <SelectTrigger id="platform"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Facebook">Facebook</SelectItem>
-                        <SelectItem value="Instagram">Instagram</SelectItem>
-                        <SelectItem value="TikTok">TikTok</SelectItem>
-                        <SelectItem value="YouTube">YouTube</SelectItem>
-                        <SelectItem value="YouTube">Whatsapp</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label>Plataformas</Label>
+                    <Popover open={openCreatePlatform} onOpenChange={setOpenCreatePlatform}>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline" role="combobox" className="w-full justify-between">
+                                <span className="truncate">
+                                    {formState.platform.length === 0 ? "Seleccionar..." : formState.platform.join(", ")}
+                                </span>
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                            <Command>
+                                <CommandGroup>
+                                    {PLATFORMS_LIST.map((plat) => (
+                                        <CommandItem key={plat} value={plat} onSelect={() => handlePlatformSelect(plat)}>
+                                            <Check className={cn("mr-2 h-4 w-4", formState.platform.includes(plat) ? "opacity-100" : "opacity-0")} />
+                                            {plat}
+                                        </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                            </Command>
+                        </PopoverContent>
+                    </Popover>
                   </div>
+
+                  {/* SELECCIÓN DE DÍAS (PARA VERSÍCULOS/TAREAS SEMANALES) */}
+                  <div className="md:col-span-2 space-y-3 border p-4 rounded-lg bg-muted/10">
+                    <div className="flex items-center gap-2">
+                        <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                        <Label className="text-base font-medium">Días de Repetición (Para tareas semanales)</Label>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {DAYS_LIST.map((day) => {
+                            const isSelected = formState.recurrenceDays.includes(day);
+                            return (
+                                <Button
+                                    key={day}
+                                    type="button"
+                                    variant={isSelected ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => handleDaySelect(day)}
+                                    className={cn("transition-all", isSelected ? "border-primary" : "text-muted-foreground")}
+                                >
+                                    {isSelected && <Check className="mr-1 h-3 w-3" />}
+                                    {day}
+                                </Button>
+                            );
+                        })}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Selecciona los días si la tarea se repite (Ej. Versículos diarios).</p>
+                  </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="publishDate">Fecha de Publicación</Label>
+                    <Label htmlFor="publishDate">Fecha de Inicio / Publicación</Label>
                     <Input id="publishDate" value={formState.publishDate} onChange={handleFormChange} type="date" />
                   </div>
                   <div className="space-y-2">
@@ -602,7 +698,6 @@ const AdminDashboard = () => {
               <CardTitle>Historial Global</CardTitle>
             </CardHeader>
             <CardContent>
-              {/* Vista de Tabla para Desktop */}
               <div className="border rounded-lg overflow-x-auto hidden md:block">
                 <Table>
                   <TableHeader>
@@ -610,7 +705,7 @@ const AdminDashboard = () => {
                       <TableHead>Contenido</TableHead>
                       <TableHead>Responsable(s)</TableHead>
                       <TableHead>Plataforma</TableHead>
-                      <TableHead>Publicar</TableHead>
+                      <TableHead>Publicar / Días</TableHead>
                       <TableHead>Progreso</TableHead>
                       <TableHead>Editar</TableHead>
                       <TableHead className="text-right">Estado</TableHead>
@@ -628,12 +723,24 @@ const AdminDashboard = () => {
                           <TableCell className="max-w-xs truncate">
                             {item.responsibleEmails?.join(", ") || "N/A"}
                           </TableCell>
-                          <TableCell>{item.platform}</TableCell>
-                          <TableCell>{item.publishDate || "N/A"}</TableCell>
+                          <TableCell>
+                            {/* Mostrar plataformas unidas por coma */}
+                            {item.platform && item.platform.length > 0 ? item.platform.join(", ") : "N/A"}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                                <span>{item.publishDate || "N/A"}</span>
+                                {/* Mostrar días si existen */}
+                                {item.recurrenceDays && item.recurrenceDays.length > 0 && (
+                                    <span className="text-xs text-muted-foreground">
+                                        {item.recurrenceDays.length === 7 ? "Todos los días" : item.recurrenceDays.map(d => d.substring(0,3)).join(", ")}
+                                    </span>
+                                )}
+                            </div>
+                          </TableCell>
                           <TableCell>
                             <Badge variant={getStatusVariant(item.status)}>{item.status}</Badge>
                           </TableCell>
-                          {/* --- BOTÓN DE EDITAR (DESKTOP) --- */}
                           <TableCell>
                             <Button variant="ghost" size="icon" onClick={() => handleOpenEditModal(item)}>
                               <Pencil className="h-4 w-4" />
@@ -658,7 +765,6 @@ const AdminDashboard = () => {
                 </Table>
               </div>
               
-              {/* Vista de Cards para Móvil */}
               <div className="space-y-4 md:hidden">
                 {loading ? (
                   <p className="text-center">Cargando...</p>
@@ -675,7 +781,6 @@ const AdminDashboard = () => {
                               {item.responsibleEmails?.join(", ") || "N/A"}
                             </CardDescription>
                           </div>
-                          {/* --- BOTÓN DE EDITAR (MÓVIL) --- */}
                           <Button variant="ghost" size="icon" onClick={() => handleOpenEditModal(item)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -684,11 +789,18 @@ const AdminDashboard = () => {
                       <CardContent className="space-y-3">
                         <div className="flex justify-between">
                           <span className="text-sm font-medium text-muted-foreground">Plataforma:</span>
-                          <span className="font-semibold">{item.platform}</span>
+                          <span className="font-semibold">{item.platform?.join(", ")}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-sm font-medium text-muted-foreground">Publicar:</span>
-                          <span className="font-semibold">{item.publishDate || "N/A"}</span>
+                          <div className="text-right">
+                             <span className="font-semibold block">{item.publishDate || "N/A"}</span>
+                             {item.recurrenceDays && item.recurrenceDays.length > 0 && (
+                                <span className="text-xs text-muted-foreground block">
+                                    {item.recurrenceDays.length === 7 ? "Diario" : item.recurrenceDays.join(", ")}
+                                </span>
+                             )}
+                          </div>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm font-medium text-muted-foreground">Progreso:</span>
@@ -715,11 +827,11 @@ const AdminDashboard = () => {
             </CardContent>
           </Card>
         </div>
-      </div> {/* --- CIERRE DEL DIV PRINCIPAL (flex-1 space-y-8) --- */}
+      </div>
 
       {/* MODAL DE EDICIÓN */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="sm:max-w-[425px] md:max-w-[600px]">
+        <DialogContent className="sm:max-w-[425px] md:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar Tarea</DialogTitle>
             <DialogDescription>
@@ -731,19 +843,59 @@ const AdminDashboard = () => {
               <Label htmlFor="edit-type">Tipo de Publicidad</Label>
               <Input id="type" value={editFormState.type} onChange={handleEditFormChange} required />
             </div>
+            
+            {/* EDITAR: PLATAFORMA MULTI-SELECT */}
             <div className="space-y-2">
-              <Label htmlFor="edit-platform">Plataforma</Label>
-              <Select value={editFormState.platform} onValueChange={(v) => handleEditSelectChange("platform", v)} required>
-                <SelectTrigger id="platform"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Facebook">Facebook</SelectItem>
-                  <SelectItem value="Instagram">Instagram</SelectItem>
-                  <SelectItem value="TikTok">TikTok</SelectItem>
-                  <SelectItem value="YouTube">YouTube</SelectItem>
-                  <SelectItem value="YouTube">Whatsapp</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Plataformas</Label>
+              <Popover open={openEditPlatform} onOpenChange={setOpenEditPlatform}>
+                  <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" className="w-full justify-between">
+                          <span className="truncate">
+                              {!editFormState.platform || editFormState.platform.length === 0 
+                                ? "Seleccionar..." 
+                                : editFormState.platform.join(", ")}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                      <Command>
+                          <CommandGroup>
+                              {PLATFORMS_LIST.map((plat) => (
+                                  <CommandItem key={plat} value={plat} onSelect={() => handleEditPlatformSelect(plat)}>
+                                      <Check className={cn("mr-2 h-4 w-4", (editFormState.platform || []).includes(plat) ? "opacity-100" : "opacity-0")} />
+                                      {plat}
+                                  </CommandItem>
+                              ))}
+                          </CommandGroup>
+                      </Command>
+                  </PopoverContent>
+              </Popover>
             </div>
+
+            {/* EDITAR: DÍAS */}
+            <div className="md:col-span-2 space-y-3 border p-4 rounded-lg bg-muted/10">
+                <Label className="text-base font-medium">Días de Repetición</Label>
+                <div className="flex flex-wrap gap-2">
+                    {DAYS_LIST.map((day) => {
+                        const isSelected = (editFormState.recurrenceDays || []).includes(day);
+                        return (
+                            <Button
+                                key={day}
+                                type="button"
+                                variant={isSelected ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => handleEditDaySelect(day)}
+                                className={cn("transition-all", isSelected ? "border-primary" : "text-muted-foreground")}
+                            >
+                                {isSelected && <Check className="mr-1 h-3 w-3" />}
+                                {day}
+                            </Button>
+                        );
+                    })}
+                </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="edit-publishDate">Fecha de Publicación</Label>
               <Input id="publishDate" value={editFormState.publishDate} onChange={handleEditFormChange} type="date" />

@@ -45,10 +45,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { 
   PlusCircle, Users, BarChart, Clock, CheckCircle, 
   ChevronsUpDown, Check, Pencil, UserCheck, Filter, 
-  X, ClipboardList, PlayCircle, CheckCircle2, CalendarDays
+  X, ClipboardList, PlayCircle, CheckCircle2, CalendarDays,
+  Trophy, Star
 } from "lucide-react"; 
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { startOfWeek, endOfWeek, isWithinInterval, parseISO } from "date-fns";
 
 interface TeamUser {
   id: string;
@@ -170,6 +172,7 @@ const AdminDashboard = () => {
     return () => unsubscribe();
   }, []);
 
+  // --- CÁLCULOS DERIVADOS PARA EL MONITOR INDIVIDUAL ---
   const memberStats = useMemo(() => {
     if (selectedMemberId === "all") return null;
 
@@ -177,12 +180,52 @@ const AdminDashboard = () => {
       (t.responsibleIds || []).includes(selectedMemberId) && t.isActive
     );
 
+    // --- LÓGICA DE CALIFICACIÓN SEMANAL ---
+    const now = new Date();
+    const start = startOfWeek(now, { weekStartsOn: 1 }); 
+    const end = endOfWeek(now, { weekStartsOn: 1 });
+
+    const weeklyTasks = memberTasks.filter(task => {
+        if (task.recurrenceDays && task.recurrenceDays.length > 0) {
+            return true;
+        }
+        if (task.publishDate) {
+            const date = parseISO(task.publishDate);
+            return isWithinInterval(date, { start, end });
+        }
+        return false;
+    });
+
+    const weeklyTotal = weeklyTasks.length;
+    const weeklyCompleted = weeklyTasks.filter(t => t.status === "Publicado").length;
+    
+    let score = 0;
+    if (weeklyTotal > 0) {
+        score = (weeklyCompleted / weeklyTotal) * 5;
+    }
+
+    let message = "Sin actividad";
+    let color = "text-muted-foreground";
+    if (weeklyTotal > 0) {
+        if (score >= 4.5) { message = "¡Excelente!"; color = "text-green-600"; }
+        else if (score >= 3.5) { message = "Buen trabajo"; color = "text-blue-600"; }
+        else if (score >= 2.5) { message = "Puede mejorar"; color = "text-yellow-600"; }
+        else { message = "Atención"; color = "text-red-600"; }
+    }
+
     return {
       total: memberTasks.length,
       planned: memberTasks.filter(t => t.status === "Planeado" || t.status === "Revisión").length,
       inProgress: memberTasks.filter(t => t.status === "En Progreso").length,
       published: memberTasks.filter(t => t.status === "Publicado").length,
-      tasks: memberTasks
+      tasks: memberTasks,
+      weekly: {
+        total: weeklyTotal,
+        completed: weeklyCompleted,
+        score: score.toFixed(1),
+        message,
+        color
+      }
     };
   }, [selectedMemberId, contentSchedule]);
 
@@ -366,8 +409,9 @@ const AdminDashboard = () => {
           Dashboard de Contenido
         </h1>
 
-        {/* CARDS DE STATS */}
+        {/* CARDS DE STATS GENERALES - DISEÑO UNIFICADO */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+          {/* Planeado */}
           <Card className="bg-background shadow-sm border-l-4 border-l-red-500 hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Contenido Planeado</CardTitle>
@@ -377,15 +421,19 @@ const AdminDashboard = () => {
               <div className="text-2xl font-bold text-red-600">{stats.planned}</div>
             </CardContent>
           </Card>
+
+          {/* En Progreso */}
           <Card className="bg-background shadow-sm border-l-4 border-l-yellow-500 hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground uppercase">En Progreso</CardTitle>
-              <BarChart className="h-5 w-5 text-yellow-500" />
+              <PlayCircle className="h-5 w-5 text-yellow-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-yellow-600">{stats.inProgress}</div>
             </CardContent>
           </Card>
+
+          {/* Publicados */}
           <Card className="bg-background shadow-sm border-l-4 border-l-green-500 hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Publicados</CardTitle>
@@ -395,6 +443,8 @@ const AdminDashboard = () => {
               <div className="text-2xl font-bold text-green-600">{stats.published}</div>
             </CardContent>
           </Card>
+
+          {/* Miembros */}
           <Card className="bg-background shadow-sm border-l-4 border-l-blue-500 hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Miembros Activos</CardTitle>
@@ -453,14 +503,50 @@ const AdminDashboard = () => {
             
             {selectedMemberId !== "all" && memberStats && (
                 <CardContent className="space-y-6 animate-in slide-in-from-top-4 duration-500 fade-in-20">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                    
+                    {/* GRIDS CON CARD DE CALIFICACIÓN */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 md:gap-6">
+                        
+                        {/* === CARD CALIFICACIÓN SEMANAL === */}
+                        <Card className="bg-gradient-to-br from-background to-muted border-2 border-primary/20 shadow-sm relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-3 opacity-10">
+                                <Trophy className="h-12 w-12 text-primary" />
+                            </div>
+                            <CardHeader className="pb-2 px-4 pt-4">
+                                <CardTitle className="text-xs font-medium text-muted-foreground uppercase flex items-center gap-2">
+                                    <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
+                                    Calif. Semanal
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="px-4 pb-4">
+                                <div className="flex items-end gap-2">
+                                    <div className={cn("text-3xl font-bold", memberStats.weekly.color)}>
+                                        {memberStats.weekly.score}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mb-1 font-medium">
+                                        / 5.0
+                                    </div>
+                                </div>
+                                <p className={cn("text-[10px] font-semibold mt-1 truncate", memberStats.weekly.color)}>
+                                    {memberStats.weekly.message}
+                                </p>
+                                <div className="mt-2 h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                                    <div 
+                                        className={cn("h-full transition-all duration-500", memberStats.weekly.score === "5.0" ? "bg-green-500" : "bg-primary")} 
+                                        style={{ width: `${(parseFloat(memberStats.weekly.score) / 5) * 100}%` }}
+                                    />
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* --- RESTO DE CARDS (Estilo unificado) --- */}
                         <Card className="bg-background shadow-sm border-l-4 border-l-blue-500 hover:shadow-md transition-shadow">
                              <CardHeader className="flex flex-row items-center justify-between pb-2">
                                 <CardTitle className="text-sm font-medium text-muted-foreground uppercase">Asignadas</CardTitle>
                                 <ClipboardList className="h-5 w-5 text-blue-500" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-blue-600">{memberStats.total}</div>
+                                <div className="text-3xl font-bold text-blue-600">{memberStats.total}</div>
                             </CardContent>
                         </Card>
                         <Card className="bg-background shadow-sm border-l-4 border-l-red-500 hover:shadow-md transition-shadow">
@@ -469,7 +555,7 @@ const AdminDashboard = () => {
                                 <Clock className="h-5 w-5 text-red-500" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-red-600">{memberStats.planned}</div>
+                                <div className="text-3xl font-bold text-red-600">{memberStats.planned}</div>
                             </CardContent>
                         </Card>
                         <Card className="bg-background shadow-sm border-l-4 border-l-yellow-500 hover:shadow-md transition-shadow">
@@ -478,7 +564,7 @@ const AdminDashboard = () => {
                                 <PlayCircle className="h-5 w-5 text-yellow-500" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-yellow-600">{memberStats.inProgress}</div>
+                                <div className="text-3xl font-bold text-yellow-600">{memberStats.inProgress}</div>
                             </CardContent>
                         </Card>
                         <Card className="bg-background shadow-sm border-l-4 border-l-green-500 hover:shadow-md transition-shadow">
@@ -487,12 +573,12 @@ const AdminDashboard = () => {
                                 <CheckCircle2 className="h-5 w-5 text-green-500" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-green-600">{memberStats.published}</div>
+                                <div className="text-3xl font-bold text-green-600">{memberStats.published}</div>
                             </CardContent>
                         </Card>
                     </div>
 
-                    {/* AQUÍ ESTÁ LA MAGIA: Tabla en Desktop / Cards en Mobile */}
+                    {/* LISTA DE TAREAS (Tabla en PC, Cards en Móvil) */}
                     <div className="space-y-4">
                         
                         {/* 1. VISTA DE TABLA (Solo Desktop) */}
@@ -540,7 +626,7 @@ const AdminDashboard = () => {
                             </Table>
                         </div>
 
-                        {/* 2. VISTA DE CARDS (Solo Móvil) - Estilo idéntico al Global History Mobile */}
+                        {/* 2. VISTA DE CARDS (Solo Móvil) */}
                         <div className="space-y-4 md:hidden">
                             <div className="flex items-center gap-2 px-1 mb-2">
                                 <Filter className="h-4 w-4 text-muted-foreground" />
@@ -785,7 +871,6 @@ const AdminDashboard = () => {
                 </Table>
               </div>
               
-              {/* Mobile List Cards - DISEÑO IDÉNTICO A USER */}
               <div className="space-y-4 md:hidden">
                 {loading ? (
                   <p className="text-center">Cargando...</p>
@@ -793,11 +878,8 @@ const AdminDashboard = () => {
                   <p className="text-center">No hay contenido.</p>
                 ) : (
                   contentSchedule.map(item => (
-                    <Card 
-                        key={item.id} 
-                        className={cn("w-full border-l-4 shadow-sm", !item.isActive ? "opacity-60 border-l-muted" : "border-l-primary")}
-                    >
-                      <CardHeader className="pb-2">
+                    <Card key={item.id} className={cn("w-full", !item.isActive && "opacity-60")}>
+                      <CardHeader>
                         <div className="flex justify-between items-start">
                           <div>
                             <CardTitle className="text-lg">{item.type}</CardTitle>
@@ -810,7 +892,7 @@ const AdminDashboard = () => {
                           </Button>
                         </div>
                       </CardHeader>
-                      <CardContent className="space-y-3 pt-2">
+                      <CardContent className="space-y-3">
                         <div className="flex justify-between">
                           <span className="text-sm font-medium text-muted-foreground">Plataforma:</span>
                           <span className="font-semibold">{item.platform?.join(", ")}</span>
@@ -851,138 +933,138 @@ const AdminDashboard = () => {
             </CardContent>
           </Card>
         </div>
-      </div>
 
-      {/* MODAL DE EDICIÓN */}
-      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="sm:max-w-[425px] md:max-w-[600px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Editar Tarea</DialogTitle>
-            <DialogDescription>
-              Realiza cambios a la tarea. Haz clic en "Actualizar" al terminar.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleUpdateTask} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-type">Tipo de Publicidad</Label>
-              <Input id="type" value={editFormState.type} onChange={handleEditFormChange} required />
-            </div>
-            
-            {/* EDITAR: PLATAFORMA MULTI-SELECT */}
-            <div className="space-y-2">
-              <Label>Plataformas</Label>
-              <Popover open={openEditPlatform} onOpenChange={setOpenEditPlatform}>
-                  <PopoverTrigger asChild>
-                      <Button variant="outline" role="combobox" className="w-full justify-between">
-                          <span className="truncate">
-                              {!editFormState.platform || editFormState.platform.length === 0 
-                                ? "Seleccionar..." 
-                                : editFormState.platform.join(", ")}
-                          </span>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                      <Command>
-                          <CommandGroup>
-                              {PLATFORMS_LIST.map((plat) => (
-                                  <CommandItem key={plat} value={plat} onSelect={() => handleEditPlatformSelect(plat)}>
-                                      <Check className={cn("mr-2 h-4 w-4", (editFormState.platform || []).includes(plat) ? "opacity-100" : "opacity-0")} />
-                                      {plat}
-                                  </CommandItem>
-                              ))}
-                          </CommandGroup>
-                      </Command>
-                  </PopoverContent>
-              </Popover>
-            </div>
-
-            {/* EDITAR: DÍAS */}
-            <div className="md:col-span-2 space-y-3 border p-4 rounded-lg bg-muted/10">
-                <Label className="text-base font-medium">Días de Repetición</Label>
-                <div className="flex flex-wrap gap-2">
-                    {DAYS_LIST.map((day) => {
-                        const isSelected = (editFormState.recurrenceDays || []).includes(day);
-                        return (
-                            <Button
-                                key={day}
-                                type="button"
-                                variant={isSelected ? "default" : "outline"}
-                                size="sm"
-                                onClick={() => handleEditDaySelect(day)}
-                                className={cn("transition-all", isSelected ? "border-primary" : "text-muted-foreground")}
-                            >
-                                {isSelected && <Check className="mr-1 h-3 w-3" />}
-                                {day}
-                            </Button>
-                        );
-                    })}
+        {/* MODAL DE EDICIÓN */}
+        <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+            <DialogContent className="sm:max-w-[425px] md:max-w-[600px] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+                <DialogTitle>Editar Tarea</DialogTitle>
+                <DialogDescription>
+                Realiza cambios a la tarea. Haz clic en "Actualizar" al terminar.
+                </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleUpdateTask} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-4">
+                <div className="space-y-2">
+                <Label htmlFor="edit-type">Tipo de Publicidad</Label>
+                <Input id="type" value={editFormState.type} onChange={handleEditFormChange} required />
                 </div>
-            </div>
+                
+                {/* EDITAR: PLATAFORMA MULTI-SELECT */}
+                <div className="space-y-2">
+                <Label>Plataformas</Label>
+                <Popover open={openEditPlatform} onOpenChange={setOpenEditPlatform}>
+                    <PopoverTrigger asChild>
+                        <Button variant="outline" role="combobox" className="w-full justify-between">
+                            <span className="truncate">
+                                {!editFormState.platform || editFormState.platform.length === 0 
+                                    ? "Seleccionar..." 
+                                    : editFormState.platform.join(", ")}
+                            </span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                        <Command>
+                            <CommandGroup>
+                                {PLATFORMS_LIST.map((plat) => (
+                                    <CommandItem key={plat} value={plat} onSelect={() => handleEditPlatformSelect(plat)}>
+                                        <Check className={cn("mr-2 h-4 w-4", (editFormState.platform || []).includes(plat) ? "opacity-100" : "opacity-0")} />
+                                        {plat}
+                                    </CommandItem>
+                                ))}
+                            </CommandGroup>
+                        </Command>
+                    </PopoverContent>
+                </Popover>
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="edit-publishDate">Fecha de Publicación</Label>
-              <Input id="publishDate" value={editFormState.publishDate} onChange={handleEditFormChange} type="date" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-format">Formato</Label>
-              <Input id="format" value={editFormState.format} onChange={handleEditFormChange} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-objective">Objetivo</Label>
-              <Input id="objective" value={editFormState.objective} onChange={handleEditFormChange} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-audience">Público Objetivo</Label>
-              <Input id="audience" value={editFormState.audience} onChange={handleEditFormChange} />
-            </div>
-            <div className="md:col-span-2 space-y-2">
-              <Label htmlFor="edit-contentIdea">Idea del Contenido</Label>
-              <Textarea id="contentIdea" value={editFormState.contentIdea} onChange={handleEditFormChange} required />
-            </div>
-            <div className="md:col-span-2 space-y-2">
-              <Label>Responsable(s)</Label>
-              <Popover open={openEditMultiSelect} onOpenChange={setOpenEditMultiSelect}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" role="combobox" className="w-full justify-between">
-                    <span className="truncate">
-                      {editFormState.responsibleIds.length === 0 && "Seleccionar miembros..."}
-                      {editFormState.responsibleIds.length === 1 && team.find(t => t.id === editFormState.responsibleIds[0])?.email}
-                      {editFormState.responsibleIds.length > 1 && `${editFormState.responsibleIds.length} miembros seleccionados`}
-                    </span>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                  <Command>
-                    <CommandInput placeholder="Buscar miembro..." />
-                    <CommandList>
-                      <CommandEmpty>No se encontraron miembros.</CommandEmpty>
-                      <CommandGroup>
-                        {team.map(member => (
-                          <CommandItem key={member.id} value={member.email} onSelect={() => {
-                              handleEditMultiSelectChange(member.id);
-                              setOpenEditMultiSelect(true); // Mantener abierto
-                            }}>
-                            <Check className={cn("mr-2 h-4 w-4", editFormState.responsibleIds.includes(member.id) ? "opacity-100" : "opacity-0")} />
-                            {member.email}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
-            <DialogFooter className="md:col-span-2">
-              <DialogClose asChild>
-                <Button type="button" variant="ghost">Cancelar</Button>
-              </DialogClose>
-              <Button type="submit">Actualizar Tarea</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+                {/* EDITAR: DÍAS */}
+                <div className="md:col-span-2 space-y-3 border p-4 rounded-lg bg-muted/10">
+                    <Label className="text-base font-medium">Días de Repetición</Label>
+                    <div className="flex flex-wrap gap-2">
+                        {DAYS_LIST.map((day) => {
+                            const isSelected = (editFormState.recurrenceDays || []).includes(day);
+                            return (
+                                <Button
+                                    key={day}
+                                    type="button"
+                                    variant={isSelected ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => handleEditDaySelect(day)}
+                                    className={cn("transition-all", isSelected ? "border-primary" : "text-muted-foreground")}
+                                >
+                                    {isSelected && <Check className="mr-1 h-3 w-3" />}
+                                    {day}
+                                </Button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                <Label htmlFor="edit-publishDate">Fecha de Publicación</Label>
+                <Input id="publishDate" value={editFormState.publishDate} onChange={handleEditFormChange} type="date" />
+                </div>
+                <div className="space-y-2">
+                <Label htmlFor="edit-format">Formato</Label>
+                <Input id="format" value={editFormState.format} onChange={handleEditFormChange} />
+                </div>
+                <div className="space-y-2">
+                <Label htmlFor="edit-objective">Objetivo</Label>
+                <Input id="objective" value={editFormState.objective} onChange={handleEditFormChange} />
+                </div>
+                <div className="space-y-2">
+                <Label htmlFor="edit-audience">Público Objetivo</Label>
+                <Input id="audience" value={editFormState.audience} onChange={handleEditFormChange} />
+                </div>
+                <div className="md:col-span-2 space-y-2">
+                <Label htmlFor="edit-contentIdea">Idea del Contenido</Label>
+                <Textarea id="contentIdea" value={editFormState.contentIdea} onChange={handleEditFormChange} required />
+                </div>
+                <div className="md:col-span-2 space-y-2">
+                <Label>Responsable(s)</Label>
+                <Popover open={openEditMultiSelect} onOpenChange={setOpenEditMultiSelect}>
+                    <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" className="w-full justify-between">
+                        <span className="truncate">
+                        {editFormState.responsibleIds.length === 0 && "Seleccionar miembros..."}
+                        {editFormState.responsibleIds.length === 1 && team.find(t => t.id === editFormState.responsibleIds[0])?.email}
+                        {editFormState.responsibleIds.length > 1 && `${editFormState.responsibleIds.length} miembros seleccionados`}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                    <Command>
+                        <CommandInput placeholder="Buscar miembro..." />
+                        <CommandList>
+                        <CommandEmpty>No se encontraron miembros.</CommandEmpty>
+                        <CommandGroup>
+                            {team.map(member => (
+                            <CommandItem key={member.id} value={member.email} onSelect={() => {
+                                handleEditMultiSelectChange(member.id);
+                                setOpenEditMultiSelect(true); // Mantener abierto
+                                }}>
+                                <Check className={cn("mr-2 h-4 w-4", editFormState.responsibleIds.includes(member.id) ? "opacity-100" : "opacity-0")} />
+                                {member.email}
+                            </CommandItem>
+                            ))}
+                        </CommandGroup>
+                        </CommandList>
+                    </Command>
+                    </PopoverContent>
+                </Popover>
+                </div>
+                <DialogFooter className="md:col-span-2">
+                <DialogClose asChild>
+                    <Button type="button" variant="ghost">Cancelar</Button>
+                </DialogClose>
+                <Button type="submit">Actualizar Tarea</Button>
+                </DialogFooter>
+            </form>
+            </DialogContent>
+        </Dialog>
+      </div>
     </AdminLayout>
   );
 };

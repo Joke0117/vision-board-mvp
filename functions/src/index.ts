@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import * as nodemailer from "nodemailer";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 
 admin.initializeApp();
 
@@ -21,22 +22,87 @@ const ICONO_TAREA = "https://firebasestorage.googleapis.com/v0/b/multimedia-icvp
 const PRIMARY_COLOR = "#3B82F6";
 const LIGHT_GRAY = "#f0f0f0";
 
+// ============================================================================
+// 1. NUEVA FUNCIÓN PROGRAMADA: Crear Tarea de Versículos Semanal
+// ============================================================================
+// Se ejecuta automáticamente cada Lunes a las 08:00 AM (Hora Colombia)
+export const createWeeklyVerseTask = onSchedule({
+    schedule: "every monday 08:00", 
+    timeZone: "America/Bogota", // CORREGIDO: timeZone (con Z mayúscula)
+    secrets: ["SENDGRID_KEY"] 
+}, async (event) => {
+    const db = admin.firestore();
+    console.log("Iniciando creación automática de tarea de versículos...");
 
-// Función principal (Cloud Function V2)
+    // 1. Correos de los responsables fijos para esta tarea
+    const targetEmails = [
+        "martinezrodelojose@gmail.com",
+        "mpayaresosorio@gmail.com",
+        "gomezpalominoleidys@gmail.com"
+    ];
+
+    // 2. Obtener los IDs de usuario correspondientes a esos correos
+    let responsibleIds: string[] = [];
+    try {
+        // Firestore 'in' soporta hasta 10 valores
+        const usersSnapshot = await db.collection("users").where("email", "in", targetEmails).get();
+        responsibleIds = usersSnapshot.docs.map(doc => doc.id);
+        console.log(`Usuarios encontrados: ${responsibleIds.length} de ${targetEmails.length}`);
+    } catch (error) {
+        console.error("Error buscando usuarios por email:", error);
+    }
+
+    // 3. Calcular la fecha de cierre (Domingo de esta semana)
+    // Se crea el Lunes (Today), publishDate será el Domingo (Today + 6 días)
+    const today = new Date(); 
+    const sunday = new Date(today);
+    sunday.setDate(today.getDate() + 6); 
+    const publishDateStr = sunday.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+
+    // 4. Crear la tarea en Firestore con el flag 'isGroupTask: true'
+    try {
+        await db.collection("contentSchedule").add({
+            type: "Versículos Diarios",
+            platform: ["Facebook", "WhatsApp"], // Array de plataformas
+            recurrenceDays: ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"],
+            publishDate: publishDateStr,
+            format: "Imagen",
+            objective: "Alcanzar visitas a las páginas mediante versículos bíblicos",
+            audience: "Seguidores, iglesia y comunidad en general",
+            contentIdea: "Alcanzar visitas a las páginas mediante versículos bíblicos",
+            responsibleIds: responsibleIds,
+            responsibleEmails: targetEmails,
+            status: "Planeado",
+            
+            // --- CAMPOS CLAVE PARA TU LÓGICA ---
+            isGroupTask: true,        // ESTO MANTIENE LA TAREA GRUPAL (Estado compartido)
+            individualStatus: {},     // Vacío porque es grupal
+            isActive: true,
+            
+            createdAt: admin.firestore.Timestamp.now(),
+            createdBy: "SYSTEM_SCHEDULED"
+        });
+        console.log("Tarea semanal de 'Versículos Diarios' creada exitosamente.");
+    } catch (error) {
+        console.error("Error creando la tarea automática:", error);
+    }
+});
+
+
+// ============================================================================
+// 2. FUNCIÓN DE NOTIFICACIONES (DISEÑO ORIGINAL)
+// ============================================================================
+// Se ejecuta cada vez que se crea un documento en 'contentSchedule'
 export const onTaskCreatedSendNotifications = onDocumentCreated(
-    // Especificamos la ruta del documento, la región (us-central1)
-    // Y AÑADIMOS LA CONFIGURACIÓN DE 'secrets' AQUÍ:
     {
         document: "contentSchedule/{contentId}",
         region: "us-central1",
-        secrets: ["SENDGRID_KEY"] // ¡ESTA ES LA LÍNEA MÁGICA!
+        secrets: ["SENDGRID_KEY"]
     },
     async (event) => {
 
-        // Ahora, process.env.SENDGRID_KEY tendrá el valor de tu secreto
         const SENDGRID_API_KEY = process.env.SENDGRID_KEY; 
 
-        // Inicializa el transportador solo durante la ejecución
         const mailTransport = nodemailer.createTransport({
             service: "SendGrid",
             auth: {
@@ -56,14 +122,14 @@ export const onTaskCreatedSendNotifications = onDocumentCreated(
             return null;
         }
         
-        // Esta comprobación sigue siendo útil por si acaso, aunque con secrets[] debería ser inusual.
         if (!SENDGRID_API_KEY) {
-            console.error("Error: SENDGRID_KEY no está definida en el entorno. (¡Algo salió mal con el Secret Manager!)");
+            console.error("Error: SENDGRID_KEY no está definida.");
             return null;
         }
         
         const emails = data.responsibleEmails;
         
+        // DISEÑO ORIGINAL DEL CORREO
         const mailOptions = {
             from: FROM_EMAIL,
             to: emails.join(","),
@@ -81,7 +147,6 @@ export const onTaskCreatedSendNotifications = onDocumentCreated(
 
         <tr>
             <td style="padding: 10px 30px 20px 30px;">
-                <!-- ICONO DE TAREA ASIGNADA DENTRO DEL H1 -->
                 <h1 style="font-size: 24px; color: #333; margin-bottom: 10px;">
                     <img src="${ICONO_TAREA}" alt="Icono de tarea" style="vertical-align: middle; width: 28px; height: 28px; margin-right: 8px;">
                     ¡Nueva Tarea Asignada!

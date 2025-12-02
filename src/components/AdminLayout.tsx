@@ -40,7 +40,7 @@ import logo from "@/assets/multimedia-logo.png";
 import { ThemeToggle } from "./ThemeToggle";
 import { HamburgerMenu } from "./HamburgerMenu";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { cn } from "@/lib/utils"; // <-- Importa cn
+import { cn } from "@/lib/utils"; 
 
 export const AdminLayout = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();

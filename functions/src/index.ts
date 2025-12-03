@@ -23,12 +23,12 @@ const PRIMARY_COLOR = "#3B82F6";
 const LIGHT_GRAY = "#f0f0f0";
 
 // ============================================================================
-// 1. NUEVA FUNCIÓN PROGRAMADA: Crear Tarea de Versículos Semanal
+// 1. FUNCIÓN PROGRAMADA: Crear Tarea de Versículos Semanal
 // ============================================================================
 // Se ejecuta automáticamente cada Lunes a las 08:00 AM (Hora Colombia)
 export const createWeeklyVerseTask = onSchedule({
     schedule: "every monday 08:00", 
-    timeZone: "America/Bogota", // CORREGIDO: timeZone (con Z mayúscula)
+    timeZone: "America/Bogota",
     secrets: ["SENDGRID_KEY"] 
 }, async (event) => {
     const db = admin.firestore();
@@ -74,7 +74,7 @@ export const createWeeklyVerseTask = onSchedule({
             responsibleEmails: targetEmails,
             status: "Planeado",
             
-            // --- CAMPOS CLAVE PARA TU LÓGICA ---
+            // --- CAMPOS CLAVE PARA LÓGICA DE RANKING ---
             isGroupTask: true,        // ESTO MANTIENE LA TAREA GRUPAL (Estado compartido)
             individualStatus: {},     // Vacío porque es grupal
             isActive: true,
@@ -90,7 +90,7 @@ export const createWeeklyVerseTask = onSchedule({
 
 
 // ============================================================================
-// 2. FUNCIÓN DE NOTIFICACIONES (DISEÑO ORIGINAL)
+// 2. FUNCIÓN DE NOTIFICACIONES
 // ============================================================================
 // Se ejecuta cada vez que se crea un documento en 'contentSchedule'
 export const onTaskCreatedSendNotifications = onDocumentCreated(
@@ -129,7 +129,6 @@ export const onTaskCreatedSendNotifications = onDocumentCreated(
         
         const emails = data.responsibleEmails;
         
-        // DISEÑO ORIGINAL DEL CORREO
         const mailOptions = {
             from: FROM_EMAIL,
             to: emails.join(","),
@@ -209,3 +208,105 @@ export const onTaskCreatedSendNotifications = onDocumentCreated(
 
         return null;
     });
+
+// ============================================================================
+// 3. GENERADOR DE RANKING MENSUAL (HISTORIAL)
+// ============================================================================
+// Se ejecuta el día 1 de cada mes a las 00:01 AM para cerrar el mes anterior
+export const generateMonthlyRanking = onSchedule({
+    schedule: "1 of month 00:01",
+    timeZone: "America/Bogota",
+}, async (event) => {
+    const db = admin.firestore();
+    console.log("Generando ranking mensual...");
+
+    // 1. Definir el rango del mes ANTERIOR
+    const now = new Date();
+    // Vamos al mes anterior (si hoy es 1 de Nov, queremos stats de Oct)
+    const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+
+    try {
+        // 2. Obtener tareas y usuarios
+        const [contentSnap, usersSnap] = await Promise.all([
+            db.collection("contentSchedule").where("isActive", "==", true).get(),
+            db.collection("users").get()
+        ]);
+
+        const users = usersSnap.docs.map(doc => ({ id: doc.id, email: doc.data().email }));
+        const tasks = contentSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+
+        // 3. Calcular puntajes
+        const scores = users.map(user => {
+            // Filtrar tareas de este usuario
+            const userTasks = tasks.filter(t => {
+                if (!t.responsibleIds || !t.responsibleIds.includes(user.id)) return false;
+
+                // Verificar si cae en el mes anterior
+                // A) Si tiene fecha de publicación
+                if (t.publishDate) {
+                    const pDate = new Date(t.publishDate);
+                    // Ajuste zona horaria simple o comparación directa UTC
+                    return pDate >= startOfPrevMonth && pDate <= endOfPrevMonth;
+                }
+                // B) Si es recurrente (cuenta para todos los meses mientras esté activa)
+                if (t.recurrenceDays && t.recurrenceDays.length > 0) {
+                    // Opcional: Podrías filtrar por fecha de creación si quieres
+                    return true; 
+                }
+                return false;
+            });
+
+            const total = userTasks.length;
+            if (total === 0) return { ...user, score: 0 };
+
+            // Contar completadas (Manejo de estado individual o grupal)
+            const completed = userTasks.filter(t => {
+                let status = t.status; // Estado global por defecto
+                // Si tiene estado individual y no es tarea grupal, usar ese
+                if (!t.isGroupTask && t.individualStatus && t.individualStatus[user.id]) {
+                    status = t.individualStatus[user.id];
+                }
+                return status === "Publicado";
+            }).length;
+
+            // Fórmula: (Completadas / Total) * 5
+            const score = (completed / total) * 5;
+            return { ...user, score };
+        });
+
+        // 4. Ordenar y obtener Top 3 (Solo scores >= 3.0 para calidad)
+        const rankedUsers = scores
+            .filter(u => u.score >= 0.1) // Filtrar inactivos absolutos
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 3)
+            .map((u, index) => ({
+                rank: index + 1,
+                userId: u.id,
+                email: u.email,
+                score: u.score
+            }));
+
+        if (rankedUsers.length === 0) {
+            console.log("No hubo actividad suficiente para generar ranking.");
+            return;
+        }
+
+        // 5. Guardar en colección 'monthlyRankings'
+        const monthName = startOfPrevMonth.toLocaleString('es-ES', { month: 'long' });
+        const year = startOfPrevMonth.getFullYear();
+        
+        await db.collection("monthlyRankings").add({
+            month: monthName,
+            year: year,
+            dateProcessed: admin.firestore.Timestamp.now(),
+            topUsers: rankedUsers,
+            title: `Top 3 - ${monthName} ${year}` // Para facilitar visualización
+        });
+
+        console.log(`Ranking de ${monthName} generado exitosamente.`);
+
+    } catch (error) {
+        console.error("Error generando ranking:", error);
+    }
+});

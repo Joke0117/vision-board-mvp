@@ -47,7 +47,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-// AGREGADO: Importamos DropdownMenu para cambiar estados
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -100,7 +99,6 @@ interface TeamUser {
   role: "admin" | "user";
 }
 
-// MODIFICADO: Agregados individualStatus y isGroupTask
 interface Content {
   id: string;
   type: string;
@@ -115,7 +113,7 @@ interface Content {
   responsibleEmails: string[];
   status: "Planeado" | "En Progreso" | "Publicado" | "Revisión";
   individualStatus?: { [userId: string]: string }; // Estado por usuario
-  isGroupTask?: boolean; // Flag para tareas grupales (Versículos)
+  isGroupTask?: boolean; // Flag para tareas grupales
   isActive: boolean;
   createdAt: any; 
 }
@@ -127,6 +125,10 @@ const AdminDashboard = () => {
   const { user } = useAuth();
   const [team, setTeam] = useState<TeamUser[]>([]);
   const [contentSchedule, setContentSchedule] = useState<Content[]>([]);
+  
+  // NUEVO ESTADO: Historial de Rankings
+  const [rankingHistory, setRankingHistory] = useState<any[]>([]);
+  
   const [loading, setLoading] = useState(true);
 
   // Estados Formularios
@@ -175,6 +177,7 @@ const AdminDashboard = () => {
 
   // --- CARGA DE DATOS ---
   useEffect(() => {
+    // 1. Cargar Equipo
     const fetchTeam = async () => {
       try {
         const usersQuery = query(collection(db, "users"));
@@ -191,8 +194,9 @@ const AdminDashboard = () => {
     };
     fetchTeam();
 
+    // 2. Cargar Tareas en Tiempo Real
     const contentQuery = query(collection(db, "contentSchedule"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(contentQuery, (snapshot) => {
+    const unsubscribeContent = onSnapshot(contentQuery, (snapshot) => {
       const contentData: Content[] = [];
       let planned = 0, inProgress = 0, published = 0;
 
@@ -207,7 +211,6 @@ const AdminDashboard = () => {
             recurrenceDays: data.recurrenceDays || [],
             responsibleIds: data.responsibleIds || [],
             createdAt: data.createdAt,
-            // Aseguramos que existan los campos nuevos
             individualStatus: data.individualStatus || {},
             isGroupTask: data.isGroupTask || false 
         } as Content;
@@ -229,34 +232,37 @@ const AdminDashboard = () => {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    // 3. NUEVO: Cargar Historial de Rankings Mensuales
+    const rankingQuery = query(collection(db, "monthlyRankings"), orderBy("dateProcessed", "desc"));
+    const unsubscribeRanking = onSnapshot(rankingQuery, (snapshot) => {
+        const historyData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setRankingHistory(historyData);
+    });
+
+    return () => {
+        unsubscribeContent();
+        unsubscribeRanking();
+    };
   }, []);
 
   // =========================================================================================
   // LOGICA DE ESTADO INDIVIDUAL Y HELPERS
   // =========================================================================================
 
-  // NUEVO: Obtiene el estado real para un usuario específico (o el global si es grupal)
   const getEffectiveStatus = (task: Content, userId?: string) => {
-    // Si es tarea grupal o no hay usuario, usa el estado global
     if (task.isGroupTask || !userId) return task.status;
-    // Si es individual, busca en el mapa, o devuelve "Planeado" por defecto
     return task.individualStatus?.[userId] || "Planeado";
   };
 
-  // NUEVO: Maneja el cambio de estado desde el Dropdown
   const handleStatusChange = async (taskId: string, newStatus: string, task: Content) => {
     if (!user) return;
     try {
         const contentRef = doc(db, "contentSchedule", taskId);
         
         if (task.isGroupTask) {
-            // Si es grupal (Versículos), actualiza el estado global para todos
             await updateDoc(contentRef, { status: newStatus });
             toast.success(`Estado grupal actualizado a: ${newStatus}`);
         } else {
-            // Si es normal, actualiza solo el estado de este usuario en el mapa
-            // Usamos la notación de punto de Firestore para actualizar solo una clave del mapa
             await updateDoc(contentRef, {
                 [`individualStatus.${user.uid}`]: newStatus
             });
@@ -268,7 +274,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // 1. Ciclo Semanal (Lunes 8:00 AM)
   const getCycleStart = () => {
       const now = new Date();
       let start = startOfWeek(now, { weekStartsOn: 1 });
@@ -285,24 +290,19 @@ const AdminDashboard = () => {
     return { start, end };
   };
 
-  // 2. Estado de Bloqueo
   const getTaskLockStatus = (publishDateString: string) => {
     if (!publishDateString) return { isLocked: false, reason: "" };
-    
     try {
       const now = new Date();
       const publishDate = parseISO(publishDateString);
       const dayOfWeek = getDay(publishDate); // 0 = Domingo
-
       let deadline: Date;
       let reason = "";
 
       if (dayOfWeek === 0) { 
-        // Domingo -> Cierra Lunes 8:00 AM
         deadline = set(addDays(publishDate, 1), { hours: 8, minutes: 0, seconds: 0 });
         reason = "Cierre de ciclo: Lunes 8:00 AM";
       } else {
-        // Lunes-Sábado -> Cierra al día siguiente 23:59
         deadline = set(addDays(publishDate, 1), { hours: 23, minutes: 59, seconds: 59 });
         reason = "Plazo de 24h vencido.";
       }
@@ -312,7 +312,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // 3. Estilos
   const getRankCardStyle = (rank: number | null) => {
       if (rank === 1) return "bg-gradient-to-br from-yellow-200 via-amber-300 to-yellow-100 border-yellow-500 text-yellow-950 shadow-lg shadow-yellow-500/30"; 
       if (rank === 2) return "bg-gradient-to-br from-slate-200 via-slate-300 to-slate-100 border-slate-500 text-slate-900 shadow-lg shadow-slate-500/30"; 
@@ -330,11 +329,9 @@ const AdminDashboard = () => {
     }
   };
 
-  // 4. Segmentación de Tareas
   const { currentTasks, historyTasks } = useMemo(() => {
     if (selectedMemberId === "all") return { currentTasks: [], historyTasks: [] };
 
-    // Filtro seguro
     const memberRawTasks = contentSchedule.filter(t => 
        Array.isArray(t.responsibleIds) && t.responsibleIds.includes(selectedMemberId) && t.isActive
     );
@@ -365,7 +362,6 @@ const AdminDashboard = () => {
     return { currentTasks: current, historyTasks: history };
   }, [selectedMemberId, contentSchedule]);
 
-  // 5. Cálculo de Ranking y Estadísticas MODIFICADO
   const memberStats = useMemo(() => {
     if (selectedMemberId === "all" || contentSchedule.length === 0) return null;
 
@@ -375,7 +371,6 @@ const AdminDashboard = () => {
     
     const total = myTotalTasks.length;
     
-    // MODIFICADO: Usamos getEffectiveStatus para contar según el estado individual
     const planned = myTotalTasks.filter(t => {
         const s = getEffectiveStatus(t, selectedMemberId);
         return s === "Planeado" || s === "Revisión";
@@ -383,7 +378,6 @@ const AdminDashboard = () => {
     const inProgress = myTotalTasks.filter(t => getEffectiveStatus(t, selectedMemberId) === "En Progreso").length;
     const published = myTotalTasks.filter(t => getEffectiveStatus(t, selectedMemberId) === "Publicado").length;
 
-    // --- LÓGICA DE RANKING MODIFICADA ---
     const weekInterval = getCustomWeekInterval();
     const now = new Date();
     const monthInterval = { start: startOfMonth(now), end: endOfMonth(now) };
@@ -397,7 +391,6 @@ const AdminDashboard = () => {
             )
         );
         const total = userTasks.length;
-        // MODIFICADO: Contamos completadas usando el estado individual de ESE usuario
         const completed = userTasks.filter(t => getEffectiveStatus(t, userId) === "Publicado").length;
         return total === 0 ? 0 : (completed / total) * 5;
     };
@@ -439,7 +432,6 @@ const AdminDashboard = () => {
     };
   }, [contentSchedule, selectedMemberId]);
 
-  // 6. Lógica de Calendario
   const daysWithTasks = (day: Date) => {
     return currentTasks.some(task => {
         if (task.publishDate && isSameDay(parseISO(task.publishDate), day)) return true;
@@ -471,7 +463,7 @@ const AdminDashboard = () => {
 
 
   // =========================================================================================
-  // MANEJADORES
+  // MANEJADORES DE FORMULARIOS
   // =========================================================================================
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormState(prev => ({ ...prev, [e.target.id]: e.target.value }));
@@ -543,7 +535,6 @@ const AdminDashboard = () => {
         responsibleIds: formState.responsibleIds,
         responsibleEmails: selectedEmails,
         status: "Planeado",
-        // NUEVO: Inicializamos valores por defecto
         individualStatus: {}, 
         isGroupTask: false, 
         isActive: true,
@@ -597,10 +588,9 @@ const AdminDashboard = () => {
     } catch (error) { toast.error("Error al cambiar estado"); }
   };
 
-  // --- COMPONENTE: Tarjeta de Tarea MODIFICADA ---
+  // --- COMPONENTE: Tarjeta de Tarea ---
   const TaskCard = ({ item, isHistory = false }: { item: Content, isHistory?: boolean }) => {
     const { isLocked, reason } = getTaskLockStatus(item.publishDate);
-    // Usamos el estado efectivo para mostrar
     const currentStatus = getEffectiveStatus(item, user?.uid);
 
     return (
@@ -621,7 +611,6 @@ const AdminDashboard = () => {
                           </TooltipProvider>
                       )}
                       
-                      {/* MODIFICADO: Dropdown para cambiar estado */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Badge variant={getStatusVariant(currentStatus)} className="text-[10px] px-1.5 h-5 cursor-pointer hover:opacity-80">
@@ -830,16 +819,18 @@ const AdminDashboard = () => {
                         </Card>
                     </div>
 
-                    {/* 3. TABS COMPLETAS (Lista, Calendario, Historial) */}
+                    {/* 3. TABS COMPLETAS (Lista, Calendario, Historial, Top Mes) */}
                     <Tabs defaultValue="list" className="w-full">
                         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-2">
                             <h3 className="text-lg font-bold flex items-center gap-2">
                                 Tareas Asignadas <Badge variant="secondary" className="text-xs">Semana Actual</Badge>
                             </h3>
-                            <TabsList className="grid grid-cols-3 w-full md:w-auto">
+                            <TabsList className="grid grid-cols-4 w-full md:w-auto">
                                 <TabsTrigger value="list"><ListFilter className="h-4 w-4 md:mr-2" /><span className="hidden md:inline">Lista</span></TabsTrigger>
                                 <TabsTrigger value="calendar"><CalendarDays className="h-4 w-4 md:mr-2" /><span className="hidden md:inline">Calendario</span></TabsTrigger>
                                 <TabsTrigger value="history"><History className="h-4 w-4 md:mr-2" /><span className="hidden md:inline">Historial</span></TabsTrigger>
+                                {/* NUEVO TRIGGER TOP MES */}
+                                <TabsTrigger value="rankings"><Trophy className="h-4 w-4 md:mr-2" /><span className="hidden md:inline">Top Mes</span></TabsTrigger>
                             </TabsList>
                         </div>
 
@@ -847,7 +838,6 @@ const AdminDashboard = () => {
                         <TabsContent value="list">
                             <Card>
                                 <CardContent className="p-0">
-                                    {/* Desktop Table */}
                                     <div className="border rounded-lg overflow-x-auto hidden md:block">
                                         <Table>
                                             <TableHeader><TableRow><TableHead>Tipo</TableHead><TableHead>Descripción</TableHead><TableHead>Fecha</TableHead><TableHead>Estado</TableHead><TableHead>Acción</TableHead></TableRow></TableHeader>
@@ -855,7 +845,7 @@ const AdminDashboard = () => {
                                                 {currentTasks.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Sin tareas actuales.</TableCell></TableRow> : 
                                                 currentTasks.map(task => {
                                                     const { isLocked, reason } = getTaskLockStatus(task.publishDate);
-                                                    const currentStatus = getEffectiveStatus(task, selectedMemberId); // Estado visual
+                                                    const currentStatus = getEffectiveStatus(task, selectedMemberId);
                                                     return (
                                                         <TableRow key={task.id} className={cn(isLocked && "bg-muted/30")}>
                                                             <TableCell className="font-medium">{task.type}</TableCell>
@@ -865,14 +855,12 @@ const AdminDashboard = () => {
                                                                 {task.recurrenceDays?.length > 0 && <span className="text-xs text-muted-foreground">{task.recurrenceDays.join(", ")}</span>}
                                                             </TableCell>
                                                             <TableCell>
-                                                                {/* MODIFICADO: Dropdown en la tabla */}
                                                                 <DropdownMenu>
                                                                     <DropdownMenuTrigger asChild>
                                                                         <Badge variant={getStatusVariant(currentStatus)} className="cursor-pointer hover:opacity-80">
                                                                             {currentStatus}
                                                                         </Badge>
                                                                     </DropdownMenuTrigger>
-                                                                    {/* Solo permite editar si estamos viendo NUESTRO propio usuario (o somos admin y queremos forzar, pero aquí asumimos el usuario logueado en la acción) */}
                                                                     <DropdownMenuContent>
                                                                          <DropdownMenuItem onClick={() => handleStatusChange(task.id, "Planeado", task)}>Planeado</DropdownMenuItem>
                                                                          <DropdownMenuItem onClick={() => handleStatusChange(task.id, "En Progreso", task)}>En Progreso</DropdownMenuItem>
@@ -896,7 +884,6 @@ const AdminDashboard = () => {
                                             </TableBody>
                                         </Table>
                                     </div>
-                                    {/* Mobile Cards */}
                                     <div className="space-y-4 md:hidden p-4">
                                         {currentTasks.length === 0 ? <p className="text-center text-muted-foreground">Sin tareas actuales.</p> : 
                                          currentTasks.map(task => <TaskCard key={task.id} item={task} />)}
@@ -946,6 +933,56 @@ const AdminDashboard = () => {
                                 </CardContent>
                             </Card>
                         </TabsContent>
+
+                        {/* NUEVO CONTENIDO: HISTORIAL DE RANKINGS */}
+                        <TabsContent value="rankings">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Salón de la Fama (Historial Mensual)</CardTitle>
+                                    <CardDescription>Los mejores desempeños de meses anteriores.</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    {rankingHistory.length === 0 ? (
+                                        <div className="text-center py-8 text-muted-foreground">
+                                            <Trophy className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                                            <p>Aún no se ha generado ningún cierre mensual.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                                            {rankingHistory.map((record: any) => (
+                                                <Card key={record.id} className="overflow-hidden border-2 border-primary/10">
+                                                    <div className="bg-primary/5 p-3 border-b border-primary/10 flex justify-between items-center">
+                                                        <span className="font-bold capitalize">{record.title}</span>
+                                                        <Badge variant="outline" className="bg-background">{record.dateProcessed?.toDate ? new Date(record.dateProcessed.toDate()).toLocaleDateString() : 'Fecha N/A'}</Badge>
+                                                    </div>
+                                                    <div className="p-4 space-y-4">
+                                                        {record.topUsers.map((u: any, i: number) => (
+                                                            <div key={i} className="flex items-center gap-3">
+                                                                <div className={cn(
+                                                                    "w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm",
+                                                                    u.rank === 1 ? "bg-yellow-100 text-yellow-700 border border-yellow-300" :
+                                                                    u.rank === 2 ? "bg-slate-100 text-slate-700 border border-slate-300" :
+                                                                    "bg-orange-100 text-orange-800 border border-orange-300"
+                                                                )}>
+                                                                    #{u.rank}
+                                                                </div>
+                                                                <div className="flex-1 overflow-hidden">
+                                                                    <p className="text-sm font-medium truncate">{u.email}</p>
+                                                                    <div className="w-full bg-secondary/30 h-1.5 rounded-full mt-1">
+                                                                        <div className="bg-primary h-full rounded-full" style={{ width: `${(u.score / 5) * 100}%` }}></div>
+                                                                    </div>
+                                                                </div>
+                                                                <span className="text-xs font-bold">{u.score.toFixed(1)}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </Card>
+                                            ))}
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
                     </Tabs>
 
                 </CardContent>
@@ -953,7 +990,6 @@ const AdminDashboard = () => {
         </Card>
 
         {/* --- SECCIÓN DE GESTIÓN GENERAL (ACORDEÓN Y TABLA GLOBAL) --- */}
-        {/* Sin cambios mayores aquí, solo referencia a los nuevos campos si es necesario editar */}
         <div className="space-y-8">
           <Accordion type="single" collapsible className="w-full">
             <AccordionItem value="item-1">
@@ -964,14 +1000,12 @@ const AdminDashboard = () => {
                 </div>
               </AccordionTrigger>
               <AccordionContent>
-                {/* --- Formulario de CREAR --- */}
                 <form onSubmit={handleSubmitContent} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-4">
                   <div className="space-y-2">
                     <Label htmlFor="type">Tipo de Publicidad</Label>
                     <Input id="type" value={formState.type} onChange={handleFormChange} placeholder="Ej. Prédica, Versículos, Anuncio" required />
                   </div>
                   
-                  {/* SELECCIÓN MÚLTIPLE DE PLATAFORMA */}
                   <div className="space-y-2">
                     <Label>Plataformas</Label>
                     <Popover open={openCreatePlatform} onOpenChange={setOpenCreatePlatform}>
@@ -998,7 +1032,6 @@ const AdminDashboard = () => {
                     </Popover>
                   </div>
 
-                  {/* SELECCIÓN DE DÍAS */}
                   <div className="md:col-span-2 space-y-3 border p-4 rounded-lg bg-muted/10">
                     <div className="flex items-center gap-2">
                         <CalendarDays className="h-4 w-4 text-muted-foreground" />
@@ -1157,9 +1190,6 @@ const AdminDashboard = () => {
               </div>
               
               <div className="space-y-4 md:hidden">
-                {/* ... (Mobile card view) similar al de arriba pero en Card */}
-                {/* Por brevedad, se mantiene el código existente aquí, 
-                    ya que la lógica principal de visualización está cubierta */}
                  {loading ? (
                   <p className="text-center">Cargando...</p>
                 ) : contentSchedule.length === 0 ? (
@@ -1185,7 +1215,6 @@ const AdminDashboard = () => {
                           <span className="text-sm font-medium text-muted-foreground">Plataforma:</span>
                           <span className="font-semibold">{item.platform?.join(", ")}</span>
                         </div>
-                        {/* ... Resto de la card móvil ... */}
                          <div className="flex justify-between items-center">
                           <span className="text-sm font-medium text-muted-foreground">Progreso:</span>
                           <Badge variant={getStatusVariant(item.status)}>{item.status}</Badge>
@@ -1207,7 +1236,7 @@ const AdminDashboard = () => {
           </Card>
         </div>
 
-        {/* MODAL DE EDICIÓN (Mantenemos el existente) */}
+        {/* MODAL DE EDICIÓN */}
         <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
             <DialogContent className="sm:max-w-[425px] md:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -1222,7 +1251,6 @@ const AdminDashboard = () => {
                 <Input id="type" value={editFormState.type} onChange={handleEditFormChange} required />
                 </div>
                 
-                {/* EDITAR: PLATAFORMA MULTI-SELECT */}
                 <div className="space-y-2">
                 <Label>Plataformas</Label>
                 <Popover open={openEditPlatform} onOpenChange={setOpenEditPlatform}>
@@ -1251,7 +1279,6 @@ const AdminDashboard = () => {
                 </Popover>
                 </div>
 
-                {/* EDITAR: DÍAS */}
                 <div className="md:col-span-2 space-y-3 border p-4 rounded-lg bg-muted/10">
                     <Label className="text-base font-medium">Días de Repetición</Label>
                     <div className="flex flex-wrap gap-2">

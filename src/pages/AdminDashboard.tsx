@@ -232,7 +232,7 @@ const AdminDashboard = () => {
       setLoading(false);
     });
 
-    // 3. NUEVO: Cargar Historial de Rankings Mensuales
+    // 3. Cargar Historial de Rankings Mensuales
     const rankingQuery = query(collection(db, "monthlyRankings"), orderBy("dateProcessed", "desc"));
     const unsubscribeRanking = onSnapshot(rankingQuery, (snapshot) => {
         const historyData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -249,25 +249,45 @@ const AdminDashboard = () => {
   // LOGICA DE ESTADO INDIVIDUAL Y HELPERS
   // =========================================================================================
 
+  // Helper para obtener el estado correcto según el tipo de tarea y el usuario seleccionado
   const getEffectiveStatus = (task: Content, userId?: string) => {
-    if (task.isGroupTask || !userId) return task.status;
-    return task.individualStatus?.[userId] || "Planeado";
+    // Si no se especifica usuario, o es tarea grupal, devuelve el global
+    if (task.isGroupTask || !userId || userId === "all") return task.status;
+    
+    // Si es tarea INDIVIDUAL, busca el estado específico del usuario.
+    // Si no existe, usa el global como respaldo (para tareas viejas), o finalmente "Planeado".
+    return task.individualStatus?.[userId] || task.status || "Planeado";
   };
 
+  // Función para cambiar estado (con lógica de "Actuar en nombre de...")
   const handleStatusChange = async (taskId: string, newStatus: string, task: Content) => {
     if (!user) return;
     try {
         const contentRef = doc(db, "contentSchedule", taskId);
         
+        // 1. Tarea Grupal ("Versículos") -> Actualiza global (afecta a todos)
         if (task.isGroupTask) {
             await updateDoc(contentRef, { status: newStatus });
-            toast.success(`Estado grupal actualizado a: ${newStatus}`);
-        } else {
-            await updateDoc(contentRef, {
-                [`individualStatus.${user.uid}`]: newStatus
-            });
-            toast.success(`Tu estado actualizado a: ${newStatus}`);
+            toast.success(`Tarea grupal actualizada a: ${newStatus}`);
+            return;
+        } 
+
+        // 2. Tarea Individual -> Actualiza el estado del usuario específico
+        // Si el admin está en "Monitor Individual" viendo a un usuario, actualiza a ESE usuario.
+        let targetUserId = user.uid; // Fallback: admin actualiza su propia tarea
+        let targetEmail = "ti mismo";
+
+        if (selectedMemberId !== "all") {
+            targetUserId = selectedMemberId;
+            const targetUser = team.find(t => t.id === selectedMemberId);
+            if (targetUser) targetEmail = targetUser.email;
         }
+
+        await updateDoc(contentRef, {
+            [`individualStatus.${targetUserId}`]: newStatus
+        });
+        toast.success(`Estado actualizado para ${targetEmail}: ${newStatus}`);
+
     } catch (error) {
         console.error("Error al actualizar estado:", error);
         toast.error("Error al actualizar el estado");
@@ -362,6 +382,7 @@ const AdminDashboard = () => {
     return { currentTasks: current, historyTasks: history };
   }, [selectedMemberId, contentSchedule]);
 
+  // --- CÁLCULO DE ESTADÍSTICAS DEL MIEMBRO SELECCIONADO ---
   const memberStats = useMemo(() => {
     if (selectedMemberId === "all" || contentSchedule.length === 0) return null;
 
@@ -371,6 +392,7 @@ const AdminDashboard = () => {
     
     const total = myTotalTasks.length;
     
+    // Contar estados usando getEffectiveStatus con fallback
     const planned = myTotalTasks.filter(t => {
         const s = getEffectiveStatus(t, selectedMemberId);
         return s === "Planeado" || s === "Revisión";
@@ -391,7 +413,15 @@ const AdminDashboard = () => {
             )
         );
         const total = userTasks.length;
-        const completed = userTasks.filter(t => getEffectiveStatus(t, userId) === "Publicado").length;
+        
+        // CORRECCIÓN: Cálculo de completadas con respaldo global
+        const completed = userTasks.filter(t => {
+            if (t.isGroupTask) return t.status === "Publicado";
+            // Si es individual, chequea si existe estado, si no, usa global
+            const status = t.individualStatus?.[userId] || t.status;
+            return status === "Publicado";
+        }).length;
+
         return total === 0 ? 0 : (completed / total) * 5;
     };
 
@@ -591,7 +621,8 @@ const AdminDashboard = () => {
   // --- COMPONENTE: Tarjeta de Tarea ---
   const TaskCard = ({ item, isHistory = false }: { item: Content, isHistory?: boolean }) => {
     const { isLocked, reason } = getTaskLockStatus(item.publishDate);
-    const currentStatus = getEffectiveStatus(item, user?.uid);
+    // Usar el estado efectivo para el usuario seleccionado
+    const currentStatus = getEffectiveStatus(item, selectedMemberId);
 
     return (
       <Card className={cn("border-l-4 shadow-sm transition-all", isLocked ? "border-l-muted bg-muted/10" : "border-l-primary")}>
@@ -611,18 +642,21 @@ const AdminDashboard = () => {
                           </TooltipProvider>
                       )}
                       
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Badge variant={getStatusVariant(currentStatus)} className="text-[10px] px-1.5 h-5 cursor-pointer hover:opacity-80">
-                                {currentStatus}
-                            </Badge>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleStatusChange(item.id, "Planeado", item)}>Planeado</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleStatusChange(item.id, "En Progreso", item)}>En Progreso</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleStatusChange(item.id, "Publicado", item)}>Publicado</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {/* CAMBIO: Se usa Select en lugar de DropdownMenu/Badge */}
+                      <Select 
+                        value={currentStatus} 
+                        onValueChange={(v) => handleStatusChange(item.id, v, item)}
+                        disabled={isLocked && !isHistory}
+                      >
+                        <SelectTrigger className="w-[110px] h-7 text-[10px] px-2">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Planeado">Planeado</SelectItem>
+                            <SelectItem value="En Progreso">En Progreso</SelectItem>
+                            <SelectItem value="Publicado">Publicado</SelectItem>
+                        </SelectContent>
+                      </Select>
 
                   </div>
               </div>
@@ -840,7 +874,7 @@ const AdminDashboard = () => {
                                 <CardContent className="p-0">
                                     <div className="border rounded-lg overflow-x-auto hidden md:block">
                                         <Table>
-                                            <TableHeader><TableRow><TableHead>Tipo</TableHead><TableHead>Descripción</TableHead><TableHead>Fecha</TableHead><TableHead>Estado</TableHead><TableHead>Acción</TableHead></TableRow></TableHeader>
+                                            <TableHeader><TableRow><TableHead>Tipo</TableHead><TableHead>Descripción</TableHead><TableHead>Fecha</TableHead><TableHead>Estado (Usuario)</TableHead><TableHead>Acción</TableHead></TableRow></TableHeader>
                                             <TableBody>
                                                 {currentTasks.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Sin tareas actuales.</TableCell></TableRow> : 
                                                 currentTasks.map(task => {
@@ -855,18 +889,20 @@ const AdminDashboard = () => {
                                                                 {task.recurrenceDays?.length > 0 && <span className="text-xs text-muted-foreground">{task.recurrenceDays.join(", ")}</span>}
                                                             </TableCell>
                                                             <TableCell>
-                                                                <DropdownMenu>
-                                                                    <DropdownMenuTrigger asChild>
-                                                                        <Badge variant={getStatusVariant(currentStatus)} className="cursor-pointer hover:opacity-80">
-                                                                            {currentStatus}
-                                                                        </Badge>
-                                                                    </DropdownMenuTrigger>
-                                                                    <DropdownMenuContent>
-                                                                         <DropdownMenuItem onClick={() => handleStatusChange(task.id, "Planeado", task)}>Planeado</DropdownMenuItem>
-                                                                         <DropdownMenuItem onClick={() => handleStatusChange(task.id, "En Progreso", task)}>En Progreso</DropdownMenuItem>
-                                                                         <DropdownMenuItem onClick={() => handleStatusChange(task.id, "Publicado", task)}>Publicado</DropdownMenuItem>
-                                                                    </DropdownMenuContent>
-                                                                </DropdownMenu>
+                                                                {/* CAMBIO: Se usa Select en la tabla también */}
+                                                                <Select 
+                                                                    value={currentStatus} 
+                                                                    onValueChange={(v) => handleStatusChange(task.id, v, task)}
+                                                                >
+                                                                    <SelectTrigger className="w-[130px] h-8 text-xs">
+                                                                        <SelectValue />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="Planeado">Planeado</SelectItem>
+                                                                        <SelectItem value="En Progreso">En Progreso</SelectItem>
+                                                                        <SelectItem value="Publicado">Publicado</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
                                                             </TableCell>
                                                             <TableCell>
                                                                 {isLocked ? (
@@ -920,7 +956,7 @@ const AdminDashboard = () => {
                                                     <TableRow key={item.id} className="opacity-70 bg-muted/30">
                                                         <TableCell className="font-medium">{item.type}<div className="text-xs text-muted-foreground truncate w-40">{item.contentIdea}</div></TableCell>
                                                         <TableCell>{item.publishDate}</TableCell>
-                                                        <TableCell><Badge variant="outline">{item.status}</Badge></TableCell>
+                                                        <TableCell><Badge variant="outline">{getEffectiveStatus(item, selectedMemberId)}</Badge></TableCell>
                                                     </TableRow>
                                                  ))}
                                             </TableBody>
@@ -1132,9 +1168,9 @@ const AdminDashboard = () => {
                       <TableHead>Responsable(s)</TableHead>
                       <TableHead>Plataforma</TableHead>
                       <TableHead>Publicar / Días</TableHead>
-                      <TableHead>Progreso</TableHead>
+                      <TableHead>Progreso Global</TableHead>
                       <TableHead>Editar</TableHead>
-                      <TableHead className="text-right">Estado</TableHead>
+                      <TableHead className="text-right">Activo</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1216,11 +1252,11 @@ const AdminDashboard = () => {
                           <span className="font-semibold">{item.platform?.join(", ")}</span>
                         </div>
                          <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium text-muted-foreground">Progreso:</span>
+                          <span className="text-sm font-medium text-muted-foreground">Progreso Global:</span>
                           <Badge variant={getStatusVariant(item.status)}>{item.status}</Badge>
                         </div>
                         <div className="flex justify-between items-center pt-2 border-t">
-                           <span className="text-sm font-medium text-muted-foreground">Estado:</span>
+                           <span className="text-sm font-medium text-muted-foreground">Activo:</span>
                             <Switch
                                 id={`switch-mobile-${item.id}`}
                                 checked={item.isActive}

@@ -14,6 +14,17 @@ interface ContentData {
     responsibleEmails: string[];
 }
 
+// NUEVA INTERFAZ: Definición para el Ranking (Corregida sin 'any')
+interface TaskData {
+    id: string;
+    responsibleIds?: string[];
+    publishDate?: string;
+    recurrenceDays?: string[];
+    status?: string;
+    isGroupTask?: boolean;
+    individualStatus?: Record<string, string>;
+}
+
 // Configuración de marca y URLs (Variables globales)
 const LOGO_URL = "https://firebasestorage.googleapis.com/v0/b/multimedia-icvp.firebasestorage.app/o/multimedia-logo.png?alt=media&token=376837ef-50fb-45ee-a1ca-90492ddefa0a";
 const FROM_EMAIL = '"Multimedia Visión Pentecostés" <notificaciones@multidiavisionpentecostes.online>';
@@ -234,7 +245,10 @@ export const generateMonthlyRanking = onSchedule({
         ]);
 
         const users = usersSnap.docs.map(doc => ({ id: doc.id, email: doc.data().email }));
-        const tasks = contentSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        
+        // CORRECCIÓN: Usamos 'as TaskData' en lugar de 'as any'.
+        // Al quitar [key: string]: any de la interfaz, el linter ya no se queja.
+        const tasks = contentSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TaskData));
 
         // 3. Calcular puntajes
         const scores = users.map(user => {

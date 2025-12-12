@@ -324,3 +324,198 @@ export const generateMonthlyRanking = onSchedule({
         console.error("Error generando ranking:", error);
     }
 });
+
+
+// ============================================================================
+// 4. GENERADORES DE INFORMES (SEMANAL, MENSUAL, ANUAL) - NUEVO CÓDIGO AÑADIDO
+// ============================================================================
+
+// NUEVA INTERFAZ: Estructura para las estadísticas del reporte (Evita error 'any')
+interface ReportStats {
+    total: number;
+    completed: number;
+    pending: number;
+    efficiency: number;
+}
+
+// A. Plantilla HTML Estilo Certificado (Usando ReportStats)
+const generateReportHtml = (userName: string, dateRange: string, stats: ReportStats, reportType: string) => {
+    let title = "";
+    let color = "#3B82F6"; 
+
+    switch (reportType) {
+        case "semanal":
+            title = "INFORME SEMANAL DE DESEMPEÑO";
+            break;
+        case "mensual":
+            title = "INFORME MENSUAL DE GESTIÓN";
+            break;
+        case "anual":
+            title = "CERTIFICADO ANUAL DE SERVICIO";
+            color = "#D97706";
+            break;
+    }
+
+    const currentDate = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    return `
+    <body style="font-family: 'Times New Roman', Times, serif; background-color: #f4f4f4; margin: 0; padding: 20px;">
+        <div style="max-width: 700px; margin: 0 auto; background-color: #ffffff; padding: 60px 50px; border: 1px solid #d1d1d1; box-shadow: 0 4px 10px rgba(0,0,0,0.05); color: #000;">
+            <div style="text-align: center; margin-bottom: 40px;">
+                <h2 style="margin: 0; font-size: 18px; font-weight: bold; letter-spacing: 1px; color: #1F2937;">MULTIMEDIA</h2>
+                <h3 style="margin: 5px 0 0 0; font-size: 14px; font-weight: normal; color: #555;">CENTRO CRISTIANO VISIÓN PENTECOSTÉS</h3>
+            </div>
+            <div style="text-align: right; margin-bottom: 40px; font-size: 14px;">Barranquilla, ${currentDate}</div>
+            <div style="margin-bottom: 20px; font-size: 16px; font-weight: bold; border-bottom: 2px solid ${color}; display: inline-block; padding-bottom: 5px;">${title}</div>
+            <div style="font-size: 16px; line-height: 1.6; text-align: justify; margin-bottom: 30px;">
+                <p>A QUIEN CORRESPONDA:</p>
+                <p>Por medio de la presente hago constar que <strong>${userName}</strong> ha prestado sus servicios y talentos en el equipo de Multimedia durante el periodo comprendido del <strong>${dateRange}</strong>.</p>
+                <p>
+                    ${reportType === 'anual' 
+                        ? "A lo largo de este año, su constancia y dedicación se han reflejado en las siguientes métricas consolidadas:" 
+                        : "Durante este tiempo, su gestión se resume en las siguientes estadísticas de rendimiento:"}
+                </p>
+                <ul style="list-style-type: none; padding: 20px; background-color: #f9f9f9; border-left: 4px solid ${color}; margin: 20px 0;">
+                    <li style="margin-bottom: 10px;">• <strong>Total Tareas Asignadas:</strong> ${stats.total}</li>
+                    <li style="margin-bottom: 10px;">• <strong>Tareas Completadas:</strong> ${stats.completed}</li>
+                    <li style="margin-bottom: 10px;">• <strong>Tareas Pendientes:</strong> ${stats.pending}</li>
+                    <li style="margin-bottom: 10px;">• <strong>Efectividad:</strong> ${stats.efficiency}%</li>
+                </ul>
+                <p>
+                    ${stats.efficiency >= 80 
+                        ? `Reconocemos su excelencia y compromiso inquebrantable, siendo un pilar fundamental para el ministerio.` 
+                        : "Agradecemos su esfuerzo y le animamos a iniciar el próximo periodo con renovadas fuerzas y mayor organización."}
+                </p>
+                <p>Se expide el presente documento para fines informativos, de reconocimiento y de seguimiento ministerial en la plataforma.</p>
+            </div>
+            <div style="margin-top: 60px; margin-bottom: 40px;">
+                <div style="width: 250px; border-top: 1px solid #000; padding-top: 10px;">
+                    <p style="margin: 0; font-weight: bold; font-size: 16px;">Dirección General</p>
+                    <p style="margin: 5px 0 0 0; font-size: 14px;">Ministerio Multimedia</p>
+                </div>
+            </div>
+            <div style="border-top: 2px solid #E5E7EB; padding-top: 15px; text-align: center; font-size: 12px; color: #666; margin-top: 50px;">
+                <p style="margin: 0;">www.visionpentecostes.org | contacto@visionpentecostes.org</p>
+            </div>
+        </div>
+    </body>`;
+};
+
+// B. Lógica Centralizada de Procesamiento
+async function processReports(period: 'semanal' | 'mensual' | 'anual') {
+    const db = admin.firestore();
+    const today = new Date();
+    
+    let startDate = new Date();
+    let endDate = new Date();
+    
+    if (period === 'semanal') {
+        startDate.setDate(today.getDate() - 7); 
+        endDate.setDate(today.getDate() - 1);
+    } else if (period === 'mensual') {
+        startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        endDate = new Date(today.getFullYear(), today.getMonth(), 0);
+    } else if (period === 'anual') {
+        startDate = new Date(today.getFullYear() - 1, 0, 1);
+        endDate = new Date(today.getFullYear() - 1, 11, 31);
+    }
+    
+    const dateRangeStr = `${startDate.toLocaleDateString('es-CO')} - ${endDate.toLocaleDateString('es-CO')}`;
+    console.log(`Generando reporte ${period}: ${dateRangeStr}`);
+
+    const SENDGRID_API_KEY = process.env.SENDGRID_KEY;
+    const mailTransport = nodemailer.createTransport({
+        service: "SendGrid",
+        auth: { user: "apikey", pass: SENDGRID_API_KEY },
+    });
+
+    try {
+        const [usersSnap, tasksSnap] = await Promise.all([
+            db.collection("users").get(),
+            db.collection("contentSchedule").get() 
+        ]);
+
+        const tasks = tasksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TaskData));
+
+        for (const userDoc of usersSnap.docs) {
+            const userId = userDoc.id;
+            const userData = userDoc.data();
+            const userEmail = userData.email;
+            const userName = userData.name || "Miembro del Equipo";
+
+            if (!userEmail) continue;
+
+            const userTasks = tasks.filter(t => {
+                if (!t.responsibleIds || !t.responsibleIds.includes(userId)) return false;
+                if (t.publishDate) {
+                    const pDate = new Date(t.publishDate);
+                    return pDate >= startDate && pDate <= endDate;
+                }
+                if (t.recurrenceDays && t.recurrenceDays.length > 0) return true; 
+                return false;
+            });
+
+            const total = userTasks.length;
+            if (total === 0 && period === 'semanal') continue;
+
+            const completed = userTasks.filter(t => {
+                let status = t.status;
+                if (!t.isGroupTask && t.individualStatus && t.individualStatus[userId]) {
+                    status = t.individualStatus[userId];
+                }
+                return status === "Publicado";
+            }).length;
+
+            const pending = total - completed;
+            const efficiency = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+            const stats: ReportStats = { total, completed, pending, efficiency };
+
+            await db.collection("userReports").add({
+                userId,
+                userName,
+                type: period,
+                dateRange: dateRangeStr,
+                createdAt: admin.firestore.Timestamp.now(),
+                stats,
+                read: false
+            });
+
+            let subject = `📄 Tu Constancia de Desempeño ${period.charAt(0).toUpperCase() + period.slice(1)}`;
+            if (period === 'anual') subject = `🏆 Certificado Anual de Servicio ${startDate.getFullYear()}`;
+
+            const htmlContent = generateReportHtml(userName, dateRangeStr, stats, period);
+            
+            if (SENDGRID_API_KEY) {
+                await mailTransport.sendMail({
+                    from: FROM_EMAIL,
+                    to: userEmail,
+                    subject: subject,
+                    html: htmlContent
+                });
+                console.log(`Reporte ${period} enviado a ${userEmail}`);
+            }
+        }
+    } catch (error) {
+        console.error("Error generando reportes:", error);
+    }
+}
+
+// C. Triggers Programados
+export const generateWeeklyReport = onSchedule({
+    schedule: "every monday 06:00",
+    timeZone: "America/Bogota",
+    secrets: ["SENDGRID_KEY"]
+}, async () => processReports('semanal'));
+
+export const generateMonthlyReport = onSchedule({
+    schedule: "1 of month 07:00",
+    timeZone: "America/Bogota",
+    secrets: ["SENDGRID_KEY"]
+}, async () => processReports('mensual'));
+
+export const generateAnnualReport = onSchedule({
+    schedule: "1 of jan 08:00",
+    timeZone: "America/Bogota",
+    secrets: ["SENDGRID_KEY"]
+}, async () => processReports('anual'));
